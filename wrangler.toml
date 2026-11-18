@@ -5,8 +5,8 @@ pages_build_output_dir = "public"
 [[d1_databases]]
 binding = "DB"
 database_name = "escuela-demo"
-# Reemplaza con el ID que devuelve `npx wrangler d1 create escuela-demo`
-database_id = "00000000-0000-0000-0000-000000000000"
+# ID de la base D1 "escuela-demo" en Cloudflare
+database_id = "6d4c54d9-95c3-4fb8-bafc-c96020287eee"
 migrations_dir = "migrations"
 
 [vars]
