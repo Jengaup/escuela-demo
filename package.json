@@ -10,8 +10,10 @@
     "seed:local": "node scripts/seed.mjs && wrangler d1 execute escuela-demo --local --file seed/seed.sql",
     "seed:remote": "node scripts/seed.mjs && wrangler d1 execute escuela-demo --remote --file seed/seed.sql",
     "setup:local": "npm run db:migrate:local && npm run seed:local",
-    "test": "node --test tests/",
-    "deploy": "wrangler pages deploy public"
+    "test": "node --test tests/api.test.mjs",
+    "test:ui": "node tests/ui-smoke.mjs",
+    "deploy": "wrangler pages deploy public",
+    "user:create": "node scripts/create-user.mjs"
   },
   "repository": {
     "type": "git",

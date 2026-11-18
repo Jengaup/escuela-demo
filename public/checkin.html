@@ -181,7 +181,7 @@
 
         <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" role="alert"></p>
 
-        <div class="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+        <div class="flex flex-col-reverse sm:flex-row gap-2 sticky -bottom-5 sm:-bottom-6 -mx-5 sm:-mx-6 px-5 sm:px-6 py-3 bg-white border-t border-stone-100">
           <template x-if="isAdmin && sel.attendance_id">
             <div class="flex gap-2">
               <button type="button" class="btn btn-danger text-sm" x-show="sel.method" @click="undo('pago')">Anular pago</button>
