@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Check-in · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+<script src="/assets/signature.js"></script>
+</head>
+<body data-page="checkin" x-data="checkin()" x-init="init()">
+<div id="shell"></div>
+
+<main class="max-w-6xl mx-auto p-4 space-y-4">
+  <div class="flex flex-wrap items-center gap-3">
+    <div>
+      <h1 class="text-2xl font-semibold text-stone-900">Check-in del día</h1>
+      <p class="text-stone-500" x-text="App.fmtDate(day.date, { weekday: 'long', day: 'numeric', month: 'long' })"></p>
+    </div>
+    <div class="ml-auto flex items-center gap-2 card px-3 py-2" x-show="day.band" x-cloak>
+      <span class="w-5 h-5 rounded-full border border-stone-300" :style="`background:${bandHex(day.band)}`"></span>
+      <span class="text-sm text-stone-600">Banda de hoy: <strong class="text-stone-900" x-text="day.band"></strong></span>
+    </div>
+  </div>
+
+  <!-- Clases de hoy -->
+  <section aria-label="Clases de hoy">
+    <div class="flex gap-3 overflow-x-auto pb-1 scrollbar-none">
+      <template x-for="s in day.sessions" :key="s.id">
+        <button type="button" @click="openSession(s.id)"
+          class="card text-left p-4 min-w-[15rem] shrink-0 transition border-2"
+          :class="current?.id === s.id ? 'border-accent bg-accent-soft' : 'border-transparent hover:border-stone-300'">
+          <div class="text-sm text-stone-500" x-text="`${App.fmtTime(s.start_time)} – ${App.fmtTime(s.end_time)}`"></div>
+          <div class="font-semibold text-stone-900 text-lg" x-text="s.course_name"></div>
+          <div class="text-sm text-stone-500" x-text="s.instructor"></div>
+          <div class="mt-3 h-2 bg-stone-200 rounded-full overflow-hidden">
+            <div class="h-full bg-emerald-500" :style="`width:${s.enrolled ? Math.min(100, s.banded / s.enrolled * 100) : 0}%`"></div>
+          </div>
+          <div class="text-xs text-stone-500 mt-1"><span x-text="s.banded"></span> de <span x-text="s.enrolled"></span> completos</div>
+        </button>
+      </template>
+      <div class="card p-6 text-stone-500 w-full text-center" x-show="loaded && !day.sessions.length" x-cloak>
+        No hay clases programadas para hoy.
+      </div>
+    </div>
+  </section>
+
+  <!-- Lista de estudiantes -->
+  <section x-show="current" x-cloak class="space-y-3">
+    <div class="flex flex-wrap gap-2 items-center">
+      <input type="search" class="input sm:max-w-xs" placeholder="Buscar estudiante…" x-model="q" aria-label="Buscar estudiante">
+      <div class="flex gap-1 bg-white border border-stone-200 rounded-xl p-1" role="tablist">
+        <template x-for="f in filters" :key="f.key">
+          <button type="button" class="px-3 py-2 rounded-lg text-sm font-medium min-h-[40px]"
+            :class="filter === f.key ? 'bg-stone-900 text-white' : 'text-stone-600'" @click="filter = f.key"
+            x-text="`${f.label} (${count(f.key)})`"></button>
+        </template>
+      </div>
+      <span class="ml-auto text-sm text-stone-500">Precio por clase: <strong class="text-stone-900" x-text="App.money(current?.price_cents)"></strong></span>
+    </div>
+
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <template x-for="st in visible" :key="st.id">
+        <button type="button" @click="openStudent(st)"
+          class="card p-4 text-left border-2 transition active:scale-[.99]"
+          :class="complete(st) ? 'border-emerald-400 bg-emerald-50' : st.attendance_id ? 'border-amber-300' : 'border-transparent hover:border-stone-300'">
+          <div class="flex items-start gap-3">
+            <div class="w-11 h-11 shrink-0 rounded-full grid place-items-center font-semibold"
+              :class="complete(st) ? 'bg-emerald-500 text-white' : 'bg-stone-100 text-stone-600'">
+              <span x-show="!complete(st)" x-text="st.first_name[0] + st.last_name[0]"></span>
+              <svg x-show="complete(st)" class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <div class="min-w-0">
+              <div class="font-semibold text-stone-900 text-lg leading-tight truncate" x-text="`${st.first_name} ${st.last_name}`"></div>
+              <div class="text-sm text-stone-500 truncate" x-text="subtitle(st)"></div>
+            </div>
+          </div>
+          <div class="flex gap-2 mt-3">
+            <span class="pill" :class="st.attendance_id ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15.2 5.2l3.6 3.6M4 20l4.5-1 10.3-10.3a2.5 2.5 0 00-3.5-3.5L5 15.5 4 20z"/></svg>
+              <span x-text="st.attendance_id ? 'Firmó' : 'Firma'"></span></span>
+            <span class="pill" :class="st.method ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'">
+              <span>$</span><span x-text="st.method ? App.METHOD_LABEL[st.method] : 'Pago'"></span></span>
+            <span class="pill" :class="st.band_delivered ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>
+              <span x-text="st.band_delivered ? 'Banda' : 'Banda'"></span></span>
+          </div>
+        </button>
+      </template>
+    </div>
+    <p class="text-center text-stone-500 py-6" x-show="!visible.length">No hay estudiantes en esta vista.</p>
+  </section>
+</main>
+
+<!-- Modal de check-in -->
+<div class="modal-backdrop" x-show="sel" x-cloak @keydown.escape.window="close()" @click.self="close()">
+  <div class="modal p-5 sm:p-6 space-y-5" role="dialog" aria-modal="true" aria-labelledby="mTitle" x-show="sel" x-transition.opacity>
+    <template x-if="sel">
+      <div class="space-y-5">
+        <div class="flex items-start gap-3">
+          <div class="min-w-0">
+            <h2 id="mTitle" class="text-xl font-semibold text-stone-900" x-text="`${sel.first_name} ${sel.last_name}`"></h2>
+            <p class="text-sm text-stone-500" x-text="`${current.course_name} · ${subtitle(sel)}`"></p>
+            <p class="text-sm text-amber-700 mt-1" x-show="sel.notes" x-text="'Nota: ' + sel.notes"></p>
+          </div>
+          <button type="button" class="ml-auto btn-ghost text-2xl leading-none" @click="close()" aria-label="Cerrar">&times;</button>
+        </div>
+
+        <!-- 1. Firma -->
+        <section class="space-y-2">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-full grid place-items-center text-sm font-bold"
+              :class="!needSign || hasSig ? 'bg-emerald-500 text-white' : 'bg-stone-900 text-white'">1</span>
+            <h3 class="font-semibold">Firma</h3>
+            <span class="ml-auto text-sm text-emerald-700" x-show="!needSign"
+              x-text="`Firmó ${sel.signed_by === 'encargado' ? 'el encargado' : 'el estudiante'} · ${App.fmtDateTime(sel.signed_at)}`"></span>
+          </div>
+          <template x-if="needSign">
+            <div class="space-y-2">
+              <div class="grid grid-cols-2 gap-2">
+                <button type="button" class="btn" :class="signer === 'estudiante' ? 'btn-primary' : 'btn-secondary'" @click="signer = 'estudiante'">Estudiante</button>
+                <button type="button" class="btn" :class="signer === 'encargado' ? 'btn-primary' : 'btn-secondary'" @click="signer = 'encargado'">
+                  <span class="truncate" x-text="sel.guardian_name ? `Encargado: ${sel.guardian_name.split(' ')[0]}` : 'Encargado'"></span></button>
+              </div>
+              <div class="relative">
+                <canvas x-ref="sig" class="sig-canvas" aria-label="Área de firma"></canvas>
+                <span class="absolute inset-0 grid place-items-center text-stone-400 pointer-events-none" x-show="!hasSig">Firme aquí con el dedo</span>
+                <button type="button" class="absolute top-2 right-2 btn-ghost text-sm bg-white/80" @click="pad.clear()" x-show="hasSig">Borrar</button>
+              </div>
+            </div>
+          </template>
+          <template x-if="!needSign">
+            <button type="button" class="text-sm text-accent underline" @click="showSignature()" x-show="!sigImg">Ver firma</button>
+          </template>
+          <img :src="sigImg" x-show="sigImg" class="border rounded-lg max-h-32" alt="Firma registrada">
+        </section>
+
+        <!-- 2. Pago -->
+        <section class="space-y-2">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-full grid place-items-center text-sm font-bold"
+              :class="!needPay || method ? 'bg-emerald-500 text-white' : 'bg-stone-900 text-white'">2</span>
+            <h3 class="font-semibold">Pago</h3>
+            <span class="ml-auto text-sm text-emerald-700" x-show="!needPay"
+              x-text="`${App.money(sel.amount_cents)} · ${App.METHOD_LABEL[sel.method]} · ${sel.received_by_name}`"></span>
+          </div>
+          <template x-if="needPay">
+            <div class="space-y-2">
+              <div class="grid grid-cols-3 gap-2">
+                <template x-for="m in methods" :key="m">
+                  <button type="button" class="btn btn-lg px-2" :class="method === m ? 'btn-primary' : 'btn-secondary'"
+                    @click="method = method === m ? null : m" x-text="App.METHOD_LABEL[m]"></button>
+                </template>
+              </div>
+              <div class="flex items-center gap-2">
+                <label class="text-sm text-stone-600" for="amt">Monto $</label>
+                <input id="amt" class="input max-w-[8rem]" inputmode="decimal" x-model="amount">
+                <span class="text-xs text-stone-500">Precargado según el curso. Toca un método para cobrar.</span>
+              </div>
+            </div>
+          </template>
+        </section>
+
+        <!-- 3. Banda -->
+        <section class="space-y-2">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-full grid place-items-center text-sm font-bold"
+              :class="!needBand || band ? 'bg-emerald-500 text-white' : 'bg-stone-900 text-white'">3</span>
+            <h3 class="font-semibold">Banda</h3>
+          </div>
+          <label class="flex items-center gap-3 card px-4 py-3 cursor-pointer" x-show="needBand">
+            <input type="checkbox" class="w-6 h-6 accent-indigo-700" x-model="band">
+            <span class="w-5 h-5 rounded-full border" :style="`background:${bandHex(current.band)}`"></span>
+            <span>Entregué la banda <strong x-text="current.band"></strong></span>
+          </label>
+          <p class="text-sm text-emerald-700" x-show="!needBand" x-text="`Banda ${sel.band_code} entregada`"></p>
+        </section>
+
+        <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" role="alert"></p>
+
+        <div class="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+          <template x-if="isAdmin && sel.attendance_id">
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-danger text-sm" x-show="sel.method" @click="undo('pago')">Anular pago</button>
+              <button type="button" class="btn btn-danger text-sm" @click="undo()">Anular check-in</button>
+            </div>
+          </template>
+          <button type="button" class="btn btn-primary btn-lg sm:ml-auto sm:min-w-[14rem]" x-show="!complete(sel)"
+            :disabled="!canConfirm || busy" @click="confirm()" x-text="busy ? 'Guardando…' : confirmLabel"></button>
+          <button type="button" class="btn btn-secondary btn-lg sm:ml-auto" x-show="complete(sel)" @click="close()">Cerrar</button>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>
+
+<script>
+const BAND_HEX = { Azul: '#2563eb', Verde: '#16a34a', Amarillo: '#facc15', Rojo: '#dc2626', Morado: '#7c3aed', Anaranjado: '#f97316', Rosa: '#ec4899' };
+
+function checkin() {
+  return {
+    day: { date: '', band: '', sessions: [] },
+    loaded: false,
+    current: null,
+    students: [],
+    q: '',
+    filter: 'pendientes',
+    filters: [{ key: 'pendientes', label: 'Pendientes' }, { key: 'completos', label: 'Completos' }, { key: 'todos', label: 'Todos' }],
+    methods: ['efectivo', 'ath_movil', 'tarjeta'],
+    sel: null, signer: 'estudiante', method: null, amount: '', band: true, hasSig: false, pad: null, sigImg: '',
+    busy: false, error: '', isAdmin: false,
+
+    async init() {
+      App.me().then((r) => (this.isAdmin = r.user.role === 'admin'));
+      await this.loadDay();
+      const fromUrl = Number(new URLSearchParams(location.search).get('s'));
+      const pick = this.day.sessions.find((s) => s.id === fromUrl) || this.day.sessions[0];
+      if (pick) await this.openSession(pick.id);
+    },
+    bandHex(code) { return BAND_HEX[(code || '').split('-')[0]] || '#a8a29e'; },
+    async loadDay() {
+      try { this.day = await App.api('GET', '/api/checkin/day'); }
+      catch (e) { App.toast(e.message, 'error'); }
+      this.loaded = true;
+    },
+    async openSession(id) {
+      try {
+        const r = await App.api('GET', `/api/checkin/session/${id}`);
+        this.current = r.session;
+        this.students = r.students.sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'));
+        history.replaceState(null, '', `?s=${id}`);
+      } catch (e) { App.toast(e.message, 'error'); }
+    },
+    complete(st) { return !!(st.attendance_id && st.method && st.band_delivered); },
+    count(key) {
+      if (key === 'todos') return this.students.length;
+      const c = this.students.filter((s) => this.complete(s)).length;
+      return key === 'completos' ? c : this.students.length - c;
+    },
+    get visible() {
+      const q = this.q.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      return this.students.filter((s) => {
+        if (this.filter === 'pendientes' && this.complete(s)) return false;
+        if (this.filter === 'completos' && !this.complete(s)) return false;
+        if (!q) return true;
+        return `${s.first_name} ${s.last_name}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q);
+      });
+    },
+    subtitle(st) {
+      const a = App.age(st.birth_date);
+      return [a !== null ? `${a} años` : null, st.guardian_name ? `Encargado: ${st.guardian_name}` : null].filter(Boolean).join(' · ');
+    },
+
+    get needSign() { return !this.sel.attendance_id; },
+    get needPay() { return !this.sel.method; },
+    get needBand() { return !this.sel.band_delivered; },
+    get canConfirm() {
+      if (this.needSign && !this.hasSig) return false;
+      return (this.needSign && this.hasSig) || (this.needPay && this.method) || (this.needBand && this.band);
+    },
+    get confirmLabel() {
+      const parts = [];
+      if (this.needPay && this.method) parts.push(`Cobrar ${App.money(Math.round(parseFloat(this.amount || 0) * 100))}`);
+      return parts.length ? `Confirmar · ${parts[0]}` : 'Confirmar check-in';
+    },
+
+    openStudent(st) {
+      this.sel = st;
+      this.error = '';
+      this.sigImg = '';
+      this.method = null;
+      this.hasSig = false;
+      this.band = true;
+      this.amount = (this.current.price_cents / 100).toFixed(2);
+      const a = App.age(st.birth_date);
+      this.signer = a !== null && a < 18 ? 'encargado' : 'estudiante';
+      this.$nextTick(() => {
+        if (this.$refs.sig) {
+          this.pad = new SignaturePad(this.$refs.sig);
+          this.pad.onChange = () => (this.hasSig = !this.pad.isEmpty());
+        }
+      });
+    },
+    close() {
+      this.pad?.destroy();
+      this.pad = null;
+      this.sel = null;
+    },
+    async showSignature() {
+      try { this.sigImg = (await App.api('GET', `/api/attendance/${this.sel.attendance_id}/signature`)).signature; }
+      catch (e) { App.toast(e.message, 'error'); }
+    },
+    async confirm() {
+      this.busy = true;
+      this.error = '';
+      const body = { session_id: this.current.id, student_id: this.sel.id, wristband: this.needBand && this.band };
+      if (this.needSign) { body.signature = this.pad.toDataURL(); body.signed_by = this.signer; }
+      if (this.needPay && this.method) body.payment = { method: this.method, amount: this.amount };
+      try {
+        await App.api('POST', '/api/checkin', body);
+        const name = this.sel.first_name;
+        this.close();
+        await Promise.all([this.openSession(this.current.id), this.loadDay()]);
+        const st = this.students.find((s) => s.id === body.student_id);
+        App.toast(st && this.complete(st) ? `✓ ${name}: check-in completo` : `Guardado: ${name}`);
+      } catch (e) {
+        this.error = e.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+    async undo(only) {
+      const what = only === 'pago' ? 'el pago' : 'todo el check-in (firma, pago y banda)';
+      if (!confirm(`¿Anular ${what} de ${this.sel.first_name}? Queda registrado en la auditoría.`)) return;
+      try {
+        await App.api('DELETE', `/api/checkin/${this.sel.attendance_id}${only ? '?only=pago' : ''}`);
+        this.close();
+        await Promise.all([this.openSession(this.current.id), this.loadDay()]);
+        App.toast('Anulado');
+      } catch (e) { this.error = e.message; }
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

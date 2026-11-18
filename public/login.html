@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Iniciar sesión · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+</head>
+<body class="min-h-dvh grid place-items-center p-4" x-data="login()">
+  <main class="w-full max-w-sm">
+    <div class="flex items-center gap-3 mb-6 justify-center">
+      <span class="w-11 h-11 rounded-xl bg-accent text-white grid place-items-center text-xl font-bold">E</span>
+      <div>
+        <h1 class="text-xl font-semibold text-stone-900 leading-tight">Escuela de Artes</h1>
+        <p class="text-sm text-stone-500">Modelaje · Costura · Cocina</p>
+      </div>
+    </div>
+    <form class="card p-6 space-y-4" @submit.prevent="submit" novalidate>
+      <div>
+        <label class="label" for="u">Usuario</label>
+        <input id="u" class="input" x-model="username" autocomplete="username" autocapitalize="none" required autofocus>
+      </div>
+      <div>
+        <label class="label" for="p">Contraseña</label>
+        <input id="p" class="input" type="password" x-model="password" autocomplete="current-password" required>
+      </div>
+      <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" x-cloak role="alert"></p>
+      <button class="btn btn-primary w-full" :disabled="busy || !username || !password">
+        <span x-text="busy ? 'Entrando…' : 'Entrar'"></span>
+      </button>
+    </form>
+  </main>
+  <script>
+    function login() {
+      return {
+        username: '', password: '', error: '', busy: false,
+        async submit() {
+          this.busy = true; this.error = '';
+          try {
+            await App.api('POST', '/api/auth/login', { username: this.username, password: this.password });
+            location.href = '/';
+          } catch (e) { this.error = e.message; this.password = ''; }
+          finally { this.busy = false; }
+        },
+      };
+    }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

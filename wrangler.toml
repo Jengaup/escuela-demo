@@ -1,0 +1,14 @@
+name = "escuela-demo"
+compatibility_date = "2025-09-01"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "escuela-demo"
+# Reemplaza con el ID que devuelve `npx wrangler d1 create escuela-demo`
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[vars]
+# "true" muestra el botón "Resetear datos demo" (solo admin). Ponlo en "false" en producción real.
+DEMO_MODE = "true"

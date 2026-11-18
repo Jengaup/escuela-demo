@@ -1,0 +1,32 @@
+{
+  "name": "escuela-demo",
+  "version": "1.0.0",
+  "description": "Demo de gestión para escuela de Modelaje, Costura y Cocina (Cloudflare Pages + D1)",
+  "scripts": {
+    "dev": "wrangler pages dev public --port 8788",
+    "db:migrate:local": "wrangler d1 migrations apply escuela-demo --local",
+    "db:migrate:remote": "wrangler d1 migrations apply escuela-demo --remote",
+    "seed:gen": "node scripts/seed.mjs",
+    "seed:local": "node scripts/seed.mjs && wrangler d1 execute escuela-demo --local --file seed/seed.sql",
+    "seed:remote": "node scripts/seed.mjs && wrangler d1 execute escuela-demo --remote --file seed/seed.sql",
+    "setup:local": "npm run db:migrate:local && npm run seed:local",
+    "test": "node --test tests/",
+    "deploy": "wrangler pages deploy public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jengaup/escuela-demo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Jengaup/escuela-demo/issues"
+  },
+  "homepage": "https://github.com/Jengaup/escuela-demo#readme",
+  "devDependencies": {
+    "@tailwindcss/browser": "^4.1.18",
+    "alpinejs": "^3.14.9",
+    "wrangler": "^4.164.0",
+    "xlsx": "^0.18.5"
+  },
+  "private": true,
+  "type": "module"
+}
