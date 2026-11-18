@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Cuadre de caja · Escuela de Artes</title>
-<link rel="icon" href="/favicon.svg">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Cuadre de caja · Runway Center</title>
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
@@ -27,7 +28,8 @@
     <button type="button" class="btn btn-primary no-print" @click="window.print()">Imprimir</button>
   </div>
 
-  <div class="hidden print:block text-sm text-stone-600">Escuela de Artes · Modelaje · Costura · Cocina — Impreso <span x-text="App.fmtDateTime(new Date().toISOString())"></span></div>
+  <div class="hidden print:flex items-center gap-4 text-sm text-stone-600"><img src="/brand/logo.webp" alt="Runway Center" class="w-20 h-auto">
+    <span>Runway Center · Centro de Creatividad y Desarrollo de Talentos — Impreso <span x-text="App.fmtDateTime(new Date().toISOString())"></span></span></div>
 
   <section class="grid gap-3 grid-cols-2 md:grid-cols-4 print-break">
     <template x-for="m in ['efectivo','ath_movil','tarjeta']" :key="m">

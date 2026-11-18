@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Estudiantes · Escuela de Artes</title>
-<link rel="icon" href="/favicon.svg">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Estudiantes · Runway Center</title>
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
@@ -160,7 +161,7 @@
             <div class="flex flex-wrap gap-2">
               <template x-for="c in courses" :key="c.id">
                 <label class="flex items-center gap-2 card px-3 py-2 cursor-pointer min-h-[48px]">
-                  <input type="checkbox" class="w-5 h-5 accent-indigo-700" :value="c.id" x-model.number="form.course_ids">
+                  <input type="checkbox" class="w-5 h-5 accent-brand" :value="c.id" x-model.number="form.course_ids">
                   <span class="text-sm" x-text="`${c.name} · ${App.daysLabel(c.days)}`"></span>
                 </label>
               </template>
@@ -168,7 +169,7 @@
           </div>
 
           <label class="flex items-center gap-2" x-show="form.id">
-            <input type="checkbox" class="w-5 h-5 accent-indigo-700" x-model="form.active"> <span>Estudiante activo</span>
+            <input type="checkbox" class="w-5 h-5 accent-brand" x-model="form.active"> <span>Estudiante activo</span>
           </label>
 
           <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" role="alert"></p>

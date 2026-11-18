@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Usuarios · Escuela de Artes</title>
-<link rel="icon" href="/favicon.svg">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Usuarios · Runway Center</title>
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
@@ -52,7 +53,7 @@
         <div><label class="label" for="pw" x-text="form.id ? 'Nueva contraseña (deja en blanco para no cambiarla)' : 'Contraseña'"></label>
           <input id="pw" class="input" type="password" x-model="form.password" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
           <p class="field-error" x-text="errors.password"></p></div>
-        <label class="flex items-center gap-2" x-show="form.id"><input type="checkbox" class="w-5 h-5 accent-indigo-700" x-model="form.active"> Usuario activo</label>
+        <label class="flex items-center gap-2" x-show="form.id"><input type="checkbox" class="w-5 h-5 accent-brand" x-model="form.active"> Usuario activo</label>
         <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" role="alert"></p>
         <div class="flex gap-2 justify-end">
           <button type="button" class="btn btn-secondary" @click="form = null">Cancelar</button>

@@ -107,16 +107,16 @@
       .map((n) => `<a href="${n.href}" class="nav-link ${n.key === active ? 'nav-active' : ''}" ${n.key === active ? 'aria-current="page"' : ''}>${n.label}</a>`)
       .join('');
     host.innerHTML = `
-      <header class="bg-white border-b border-stone-200 no-print">
-        <div class="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
-          <a href="/" class="flex items-center gap-2 font-semibold text-stone-900">
-            <span class="w-8 h-8 rounded-lg bg-accent text-white grid place-items-center text-sm font-bold">E</span>
-            <span class="hidden sm:inline">Escuela de Artes</span>
+      <header class="bg-ink no-print">
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
+          <a href="/" class="flex items-center gap-3" aria-label="Runway Center, inicio">
+            <img src="/brand/rc.webp" alt="" class="h-8 w-auto">
+            <span class="hidden sm:inline brand-word text-sm text-gold">Runway Center</span>
           </a>
           <div class="ml-auto flex items-center gap-3 text-sm">
-            <span class="text-stone-600 truncate max-w-[10rem]">${escapeHtml(user.name)}
-              <span class="ml-1 text-xs uppercase tracking-wide text-stone-400">${user.role}</span></span>
-            <button type="button" id="logoutBtn" class="btn-ghost">Salir</button>
+            <span class="text-stone-300 truncate max-w-[10rem]">${escapeHtml(user.name)}
+              <span class="ml-1 text-xs uppercase tracking-wide text-stone-500">${user.role}</span></span>
+            <button type="button" id="logoutBtn" class="btn-ghost-dark">Salir</button>
           </div>
         </div>
         <nav class="max-w-6xl mx-auto px-2 flex gap-1 overflow-x-auto pb-2 scrollbar-none" aria-label="Principal">${links}</nav>

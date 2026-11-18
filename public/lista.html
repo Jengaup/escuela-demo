@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Lista de asistencia · Escuela de Artes</title>
-<link rel="icon" href="/favicon.svg">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Lista de asistencia · Runway Center</title>
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
@@ -28,19 +29,21 @@
 </div>
 
 <main class="max-w-4xl mx-auto p-6 print:p-0" x-show="loaded" x-cloak>
-  <header class="flex items-start gap-4 mb-4">
+  <header class="flex flex-wrap items-start gap-4 mb-4">
+    <img src="/brand/logo.webp" alt="Runway Center" class="w-24 h-auto">
     <div class="flex-1">
-      <div class="text-sm text-stone-500">Escuela de Artes · Lista de asistencia</div>
+      <div class="text-sm text-stone-500">Runway Center · Lista de asistencia</div>
       <h1 class="text-2xl font-semibold text-stone-900" x-text="info.course"></h1>
       <div class="text-sm text-stone-600" x-text="`${info.schedule} · Instructor: ${info.instructor}`"></div>
     </div>
-    <div class="text-right text-sm">
+    <div class="sm:text-right text-sm">
       <div>Fecha: <strong x-text="info.date ? App.fmtDate(info.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '______________________'"></strong></div>
       <div class="text-stone-500" x-text="`${rows.length} matriculado(s)`"></div>
     </div>
   </header>
 
-  <table class="sheet w-full border-collapse">
+  <div class="overflow-x-auto print:overflow-visible">
+  <table class="sheet w-full border-collapse min-w-[36rem] print:min-w-0">
     <thead>
       <tr><th class="w-8">#</th><th>Estudiante</th><th>Encargado</th><th class="w-20">Hora</th><th class="w-48">Firma</th><th class="w-24">Pagó</th></tr>
     </thead>
@@ -58,6 +61,7 @@
       </template>
     </tbody>
   </table>
+  </div>
 
   <div class="grid grid-cols-2 gap-12 mt-12 text-sm">
     <div class="border-t border-stone-400 pt-1">Firma del instructor</div>

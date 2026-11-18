@@ -117,7 +117,7 @@ export function buildSeed(today, opts = {}) {
     [2, 1, 2, [d(1), d(5)], '17:00', '18:30', 8500, 'Shirley Cardona', true, 4500, 5000],
     [3, 2, 1, [d(0), d(2)], '18:00', '20:00', 6000, 'Ana Luisa Pagán', false, 3500, 4000],
     [4, 2, 3, [d(4)], '09:00', '12:00', 9000, 'Ana Luisa Pagán', false, 5000, 4000],
-    [5, 3, 2, [d(0), d(4)], '18:30', '20:30', 7500, 'Chef Rubén Arroyo', false, 4000, 5000],
+    [5, 3, 2, [d(0), d(4)], '18:30', '20:30', 7500, 'Chef Noelian Ortiz', false, 4000, 5000],
   ];
   const courseName = { 1: 'Modelaje Básico', 2: 'Modelaje Intermedio', 3: 'Costura Básico', 4: 'Costura Avanzado', 5: 'Cocina Intermedio' };
   inserts('courses', ['id', 'program_id', 'level_id', 'days', 'start_time', 'end_time', 'price_cents', 'instructor', 'exam_fee_cents', 'enrollment_fee_cents'],

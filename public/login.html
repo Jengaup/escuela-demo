@@ -3,21 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Iniciar sesión · Escuela de Artes</title>
-<link rel="icon" href="/favicon.svg">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Iniciar sesión · Runway Center</title>
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
 </head>
-<body class="min-h-dvh grid place-items-center p-4" x-data="login()">
+<body class="min-h-dvh grid place-items-center p-4 bg-ink" x-data="login()">
   <main class="w-full max-w-sm">
-    <div class="flex items-center gap-3 mb-6 justify-center">
-      <span class="w-11 h-11 rounded-xl bg-accent text-white grid place-items-center text-xl font-bold">E</span>
-      <div>
-        <h1 class="text-xl font-semibold text-stone-900 leading-tight">Escuela de Artes</h1>
-        <p class="text-sm text-stone-500">Modelaje · Costura · Cocina</p>
-      </div>
+    <div class="flex flex-col items-center mb-6">
+      <img src="/brand/logo.webp" alt="Runway Center · Centro de Creatividad y Desarrollo de Talentos" class="w-56 sm:w-64 h-auto">
     </div>
     <form class="card p-6 space-y-4" @submit.prevent="submit" novalidate>
       <div>
@@ -29,11 +26,11 @@
         <input id="p" class="input" type="password" x-model="password" autocomplete="current-password" required>
       </div>
       <label class="flex items-center gap-3 min-h-[48px] cursor-pointer">
-        <input type="checkbox" class="w-6 h-6 accent-indigo-700" x-model="remember">
+        <input type="checkbox" class="w-6 h-6 accent-brand" x-model="remember">
         <span class="text-stone-700">Mantener abierta en esta tablet</span>
       </label>
       <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" x-cloak role="alert"></p>
-      <button class="btn btn-primary w-full" :disabled="busy || !username || !password">
+      <button class="btn btn-gold w-full" :disabled="busy || !username || !password">
         <span x-text="busy ? 'Entrando…' : 'Entrar'"></span>
       </button>
     </form>

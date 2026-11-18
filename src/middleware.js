@@ -13,7 +13,7 @@ const CSP = [
   "form-action 'self'",
 ].join('; ');
 
-const PUBLIC_PATHS = new Set(['/login', '/login.html', '/favicon.svg']);
+const PUBLIC_PATHS = new Set(['/login', '/login.html', '/favicon.png', '/apple-touch-icon.png']);
 
 function withSecurityHeaders(res) {
   const r = new Response(res.body, res);

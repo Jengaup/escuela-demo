@@ -6,12 +6,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Recepción">
-<meta name="theme-color" content="#4338ca">
-<title>Recepción · Escuela de Artes</title>
-<link rel="icon" href="/favicon.svg">
-<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#111111">
+<title>Recepción · Runway Center</title>
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
@@ -24,15 +24,15 @@
 <body class="min-h-dvh flex flex-col bg-stone-100" x-data="recepcion()">
 
 <!-- Barra superior mínima -->
-<header class="bg-white border-b border-stone-200 no-print">
-  <div class="max-w-4xl mx-auto px-4 h-14 flex items-center gap-3">
-    <span class="w-8 h-8 rounded-lg bg-accent text-white grid place-items-center text-sm font-bold">E</span>
-    <span class="font-semibold text-stone-900">Recepción</span>
-    <span class="text-stone-500 text-sm hidden sm:inline" x-text="clock"></span>
-    <div class="ml-auto flex items-center gap-3 text-sm">
-      <span class="text-stone-600 truncate max-w-[9rem]" x-text="userName"></span>
-      <a href="/" class="btn-ghost" x-show="isAdmin" x-cloak>Menú</a>
-      <button type="button" class="btn-ghost" @click="App.logout()">Salir</button>
+<header class="bg-ink no-print">
+  <div class="max-w-4xl mx-auto px-4 h-16 flex items-center gap-3">
+    <img src="/brand/rc.webp" alt="Runway Center" class="h-8 w-auto">
+    <span class="brand-word text-sm text-gold">Recepción</span>
+    <span class="text-stone-400 text-sm hidden md:inline" x-text="clock"></span>
+    <div class="ml-auto flex items-center gap-1 sm:gap-3 text-sm">
+      <span class="text-stone-300 truncate max-w-[9rem] hidden sm:inline" x-text="userName"></span>
+      <a href="/" class="btn-ghost-dark" x-show="isAdmin" x-cloak>Menú</a>
+      <button type="button" class="btn-ghost-dark" @click="App.logout()">Salir</button>
     </div>
   </div>
 </header>
@@ -42,8 +42,8 @@
   <!-- 1. Esperando chapita -->
   <section x-show="view === 'idle'" class="flex-1 flex flex-col items-center justify-center text-center gap-6 py-6">
     <div class="relative w-44 h-44 grid place-items-center">
-      <span class="absolute inset-0 rounded-full bg-accent opacity-10 animate-ping" x-show="readerReady"></span>
-      <div class="relative w-40 h-40 rounded-full bg-accent text-white grid place-items-center shadow-lg">
+      <span class="absolute inset-0 rounded-full bg-gold opacity-20 animate-ping" x-show="readerReady"></span>
+      <div class="relative w-40 h-40 rounded-full bg-gold text-stone-900 grid place-items-center shadow-lg">
         <svg class="w-20 h-20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M8.5 7.5a6 6 0 010 9M12 5a9.5 9.5 0 010 14M15.5 2.5a13 13 0 010 19" stroke-linecap="round"/><circle cx="5" cy="12" r="1.6" fill="currentColor"/>
         </svg>
@@ -103,7 +103,7 @@
                 <div class="text-4xl font-bold text-stone-900" x-text="App.money(cents(amount))"></div>
               </div>
               <label class="flex items-center gap-3 text-lg min-h-[56px] cursor-pointer" x-show="st.other_due_cents > 0">
-                <input type="checkbox" class="w-7 h-7 accent-indigo-700" x-model="payAll" @change="setAmount()">
+                <input type="checkbox" class="w-7 h-7 accent-brand" x-model="payAll" @change="setAmount()">
                 Cobrar también lo que debe
               </label>
               <div class="w-full flex items-center gap-2 text-stone-600">

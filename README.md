@@ -1,8 +1,15 @@
-# Escuela de Artes · Demo de gestión
+# Runway Center · Sistema de recepción y cobros
 
-App web para una escuela de Modelaje, Costura y Cocina (niveles Básico, Intermedio y Avanzado). Reemplaza el Excel con un sistema de check-in, cobros, matrículas y reportes. Está diseñada primero para tablet y teléfono, con la interfaz en español de Puerto Rico.
+App web para **Runway Center**, Centro de Creatividad y Desarrollo de Talentos (Modelaje, Costura y Cocina; niveles Básico, Intermedio y Avanzado). Reemplaza el Excel con un sistema de check-in, cobros, matrículas y reportes. Está diseñada primero para tablet y teléfono, con la interfaz en español de Puerto Rico.
 
 Corre completa en el plan gratis de Cloudflare: un **Worker** con archivos estáticos (pantallas y API) y **D1** (base de datos SQLite).
+
+## Marca
+
+- Logo en `public/brand/` (`logo.webp` completo y `rc.webp` solo las letras), con fondo transparente.
+- Colores: negro `#141414` para botones y barra superior, dorado `#d4a62a` para resaltar y dorado oscuro `#8c6d15` para texto y enlaces (cumple contraste AA sobre blanco). Se cambian en `public/assets/app.css` (`:root`).
+- Letras: Montserrat para títulos e Inter para el texto.
+- Íconos de la tablet y del navegador: `public/icon-192.png`, `icon-512.png`, `apple-touch-icon.png` y `favicon.png`.
 
 ## Usuarios demo
 

@@ -4,23 +4,36 @@
 
 @layer components {
 :root {
-  --accent: #4338ca;
-  --accent-dark: #3730a3;
-  --accent-soft: #eef2ff;
+  /* Marca Runway Center: negro y dorado */
+  --ink: #141414;          /* botones principales, barra superior */
+  --ink-2: #2a2a2a;
+  --gold: #d4a62a;         /* decorativo (iconos, barras, bordes) */
+  --gold-light: #f2d27a;
+  --accent: #8c6d15;       /* dorado oscuro: texto y enlaces sobre blanco (contraste AA) */
+  --accent-dark: #6f5510;
+  --accent-soft: #faf3df;
 }
 html { -webkit-text-size-adjust: 100%; }
-body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f5f5f4; }
+body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f6f5f2; }
+h1, h2, .font-brand { font-family: 'Montserrat', 'Inter', system-ui, sans-serif; letter-spacing: -0.01em; }
+.brand-word { font-family: 'Montserrat', 'Inter', sans-serif; letter-spacing: .18em; text-transform: uppercase; font-weight: 600; }
+.accent-brand { accent-color: var(--accent); }
+.bg-gold { background: linear-gradient(135deg, var(--gold-light), var(--gold) 45%, #a8791a); }
+.text-gold { color: var(--gold); }
+.bg-ink { background-color: var(--ink); }
 [x-cloak] { display: none !important; }
 
-.bg-accent { background-color: var(--accent); }
+.bg-accent { background-color: var(--gold); }
 .text-accent { color: var(--accent); }
 .border-accent { border-color: var(--accent); }
 .ring-accent { --tw-ring-color: var(--accent); }
 .bg-accent-soft { background-color: var(--accent-soft); }
 
-.nav-link { white-space: nowrap; padding: .5rem .875rem; border-radius: .625rem; font-size: .95rem; color: #57534e; font-weight: 500; }
-.nav-link:hover { background: #f5f5f4; color: #1c1917; }
-.nav-active { background: var(--accent-soft); color: var(--accent); }
+.nav-link { white-space: nowrap; padding: .5rem .875rem; border-radius: .625rem; font-size: .95rem; color: #d6d3d1; font-weight: 500; }
+.nav-link:hover { background: rgba(255,255,255,.08); color: #fff; }
+.nav-active { background: rgba(212,166,42,.16); color: var(--gold-light); }
+.btn-ghost-dark { padding: .375rem .75rem; border-radius: .5rem; color: #d6d3d1; font-weight: 500; }
+.btn-ghost-dark:hover { background: rgba(255,255,255,.08); color: #fff; }
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
 
@@ -28,8 +41,10 @@ body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 48px; padding: 0 1.25rem;
   border-radius: .75rem; font-weight: 600; font-size: 1rem; transition: background-color .15s, opacity .15s; user-select: none; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:not(:disabled):hover { background: var(--accent-dark); }
+.btn-primary { background: var(--ink); color: #fff; }
+.btn-primary:not(:disabled):hover { background: var(--ink-2); }
+.btn-gold { background: linear-gradient(135deg, var(--gold-light), var(--gold)); color: var(--ink); }
+.btn-gold:not(:disabled):hover { filter: brightness(1.05); }
 .btn-secondary { background: #fff; color: #292524; border: 1px solid #d6d3d1; }
 .btn-secondary:not(:disabled):hover { background: #fafaf9; }
 .btn-danger { background: #fff; color: #b91c1c; border: 1px solid #fecaca; }

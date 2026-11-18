@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Asistencia · Escuela de Artes</title>
-<link rel="icon" href="/favicon.svg">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Asistencia · Runway Center</title>
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
@@ -170,7 +171,7 @@
         <!-- 3. Banda -->
         <section class="space-y-2">
           <label class="flex items-center gap-3 card px-4 py-3 cursor-pointer" x-show="needBand">
-            <input type="checkbox" class="w-6 h-6 accent-indigo-700" x-model="band">
+            <input type="checkbox" class="w-6 h-6 accent-brand" x-model="band">
             <span class="w-5 h-5 rounded-full border" :style="`background:${bandHex(current.band)}`"></span>
             <span>Entregué la banda <strong x-text="current.band"></strong></span>
           </label>
