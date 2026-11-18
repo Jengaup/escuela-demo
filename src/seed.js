@@ -15,7 +15,8 @@ export const DATA_TABLES = ['wristbands', 'payments', 'attendance', 'class_sessi
 const FIRST_F = ['Valeria', 'Camila', 'Sofía', 'Isabella', 'Gabriela', 'Natalia', 'Andrea', 'Paola', 'Mariana', 'Kiara', 'Yaritza', 'Keishla', 'Nicole', 'Alondra', 'Génesis', 'Adriana', 'Coral', 'Zuleyka', 'Nahomy', 'Ivelisse'];
 const FIRST_M = ['Luis', 'José', 'Carlos', 'Javier', 'Joshua', 'Jean Carlos', 'Adrián', 'Daniel', 'Yadiel', 'Ángel'];
 const LAST = ['Rivera', 'Rodríguez', 'Santiago', 'Colón', 'Ortiz', 'Torres', 'Vázquez', 'Pérez', 'Cruz', 'Martínez', 'González', 'Díaz', 'Hernández', 'Morales', 'Reyes', 'Ramos', 'Figueroa', 'Medina', 'Negrón', 'Maldonado', 'Meléndez', 'Rosado', 'Acevedo', 'Báez'];
-const GUARD_F = ['Wanda', 'Migdalia', 'Lourdes', 'Marisol', 'Nilda', 'Brenda', 'Glorimar', 'Edwin', 'Héctor', 'Rafael'];
+const GUARD_F = ['Wanda', 'Migdalia', 'Lourdes', 'Marisol', 'Nilda', 'Brenda', 'Glorimar'];
+const GUARD_M = ['Edwin', 'Héctor', 'Rafael', 'Wilfredo'];
 const NOTES = ['Alergia al maní.', 'Prefiere comunicación por WhatsApp.', 'Hermana también estudia aquí.', 'Necesita factura para reembolso.', 'Usa espejuelos.', null, null, null, null, null];
 
 function rng(seed) {
@@ -92,9 +93,10 @@ export function buildSeed(today, opts = {}) {
     const phone = `(${r() < 0.6 ? '787' : '939'}) ${200 + Math.floor(r() * 799)}-${String(Math.floor(r() * 10000)).padStart(4, '0')}`;
     let guardianName = null;
     if (minor) {
-      guardianName = `${pick(GUARD_F)} ${last.split(' ')[0]}`;
-      guardians.push([id, guardianName, pick(['Madre', 'Madre', 'Padre', 'Abuela', 'Tía']), phone, null]);
-      if (r() < 0.3) guardians.push([id, `${pick(GUARD_F)} ${last.split(' ')[1]}`, 'Padre', `(787) ${300 + Math.floor(r() * 600)}-${String(Math.floor(r() * 10000)).padStart(4, '0')}`, null]);
+      const male = r() < 0.25;
+      guardianName = `${pick(male ? GUARD_M : GUARD_F)} ${last.split(' ')[0]}`;
+      guardians.push([id, guardianName, male ? 'Padre' : pick(['Madre', 'Madre', 'Madre', 'Abuela', 'Tía']), phone, null]);
+      if (r() < 0.3) guardians.push([id, `${pick(male ? GUARD_F : GUARD_M)} ${last.split(' ')[1]}`, male ? 'Madre' : 'Padre', `(787) ${300 + Math.floor(r() * 600)}-${String(Math.floor(r() * 10000)).padStart(4, '0')}`, null]);
     }
     const email = `${ascii(first)}.${ascii(last.split(' ')[0])}${Math.floor(r() * 90 + 10)}@ejemplo.com`;
     students.push([id, first, last, birth, guardianName, phone, minor && r() < 0.5 ? null : email, pick(NOTES), minor]);

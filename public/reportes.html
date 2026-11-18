@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reportes · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body data-page="reportes" x-data="reports()" x-init="init()">
+<div id="shell"></div>
+
+<main class="max-w-6xl mx-auto p-4 space-y-4">
+  <div class="flex flex-wrap items-center gap-2">
+    <h1 class="text-2xl font-semibold text-stone-900 mr-auto">Reportes</h1>
+    <button type="button" class="btn btn-secondary" @click="exportCsv()" :disabled="tab === 'audit' ? !audit.length : !r">Exportar CSV</button>
+    <button type="button" class="btn btn-primary" @click="exportXlsx()" :disabled="!r">Exportar Excel</button>
+  </div>
+
+  <section class="card p-4 space-y-3 no-print">
+    <div class="flex flex-wrap gap-2">
+      <template x-for="p in presets" :key="p.label">
+        <button type="button" class="btn btn-secondary text-sm min-h-[40px]" @click="preset(p)" x-text="p.label"></button>
+      </template>
+    </div>
+    <div class="grid gap-3 sm:grid-cols-4 items-end">
+      <div><label class="label" for="from">Desde</label><input id="from" type="date" class="input" x-model="from"></div>
+      <div><label class="label" for="to">Hasta</label><input id="to" type="date" class="input" x-model="to"></div>
+      <div><label class="label" for="course">Curso</label>
+        <select id="course" class="input" x-model="courseId"><option value="">Todos</option>
+          <template x-for="c in courses" :key="c.id"><option :value="c.id" x-text="c.name"></option></template></select></div>
+      <button type="button" class="btn btn-primary" @click="load()" :disabled="busy" x-text="busy ? 'Cargando…' : 'Ver reporte'"></button>
+    </div>
+  </section>
+
+  <template x-if="r">
+    <section class="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <div class="card p-4"><div class="text-sm text-stone-500">Asistencias</div><div class="text-2xl font-semibold" x-text="r.attendance.length"></div></div>
+      <div class="card p-4"><div class="text-sm text-stone-500">Cobrado</div><div class="text-2xl font-semibold text-accent" x-text="App.money(sum(r.payments))"></div></div>
+      <div class="card p-4"><div class="text-sm text-stone-500">Sin pagar</div><div class="text-2xl font-semibold" x-text="r.attendance.filter(a => !a.method).length"></div></div>
+      <div class="card p-4"><div class="text-sm text-stone-500">Clases dadas</div><div class="text-2xl font-semibold" x-text="r.summary.reduce((t, s) => t + s.sessions, 0)"></div></div>
+    </section>
+  </template>
+
+  <div class="flex gap-1 border-b border-stone-200 overflow-x-auto scrollbar-none">
+    <template x-for="t in tabs.filter(t => !t.admin || isAdmin)" :key="t.key">
+      <button type="button" class="px-4 py-3 font-medium border-b-2 whitespace-nowrap" :class="tab === t.key ? 'border-accent text-accent' : 'border-transparent text-stone-500'"
+        @click="tab = t.key; if (t.key === 'audit') loadAudit()" x-text="t.label"></button>
+    </template>
+  </div>
+
+  <div class="card overflow-x-auto" x-show="tab === 'summary'">
+    <table class="table">
+      <thead><tr><th>Curso</th><th class="text-right">Clases</th><th class="text-right">Asistencias</th><th class="text-right">Pagadas</th>
+        <th class="text-right">Efectivo</th><th class="text-right">ATH Móvil</th><th class="text-right">Tarjeta</th><th class="text-right">Total</th></tr></thead>
+      <tbody>
+        <template x-for="s in r?.summary || []" :key="s.id">
+          <tr><td x-text="s.course_name"></td><td class="text-right" x-text="s.sessions"></td><td class="text-right" x-text="s.attendances"></td>
+            <td class="text-right" x-text="s.paid_count"></td><td class="text-right" x-text="App.money(s.efectivo)"></td>
+            <td class="text-right" x-text="App.money(s.ath_movil)"></td><td class="text-right" x-text="App.money(s.tarjeta)"></td>
+            <td class="text-right font-semibold" x-text="App.money(s.collected)"></td></tr>
+        </template>
+      </tbody>
+    </table>
+    <p class="p-4 text-stone-500" x-show="r && !r.summary.length">Sin clases en este rango.</p>
+  </div>
+
+  <div class="card overflow-x-auto" x-show="tab === 'attendance'">
+    <table class="table">
+      <thead><tr><th>Fecha</th><th>Curso</th><th>Estudiante</th><th>Firmó</th><th>Pago</th><th>Cobró</th><th>Banda</th></tr></thead>
+      <tbody>
+        <template x-for="(a, i) in (r?.attendance || []).slice(0, limit)" :key="i">
+          <tr><td class="whitespace-nowrap" x-text="App.fmtDate(a.date)"></td><td x-text="a.course_name"></td>
+            <td><a class="text-accent" :href="`/estudiantes?id=${a.student_id}`" x-text="a.student"></a></td>
+            <td x-text="a.signed_by === 'encargado' ? 'Encargado' : 'Estudiante'"></td>
+            <td class="whitespace-nowrap"><span x-show="a.method" x-text="`${App.money(a.amount_cents)} · ${App.METHOD_LABEL[a.method]}`"></span>
+              <span x-show="!a.method" class="pill bg-amber-100 text-amber-800">Pendiente</span></td>
+            <td x-text="a.received_by || ''"></td><td x-text="a.band ? a.band_code : '—'"></td></tr>
+        </template>
+      </tbody>
+    </table>
+    <button type="button" class="btn btn-ghost w-full" x-show="(r?.attendance.length || 0) > limit" @click="limit += 200">Ver más</button>
+  </div>
+
+  <div class="card overflow-x-auto" x-show="tab === 'payments'">
+    <table class="table">
+      <thead><tr><th>Fecha cobro</th><th>Estudiante</th><th>Curso</th><th>Método</th><th>Cobró</th><th class="text-right">Monto</th></tr></thead>
+      <tbody>
+        <template x-for="(p, i) in (r?.payments || []).slice(0, limit)" :key="i">
+          <tr><td class="whitespace-nowrap" x-text="App.fmtDateTime(p.created_at)"></td><td x-text="p.student"></td><td x-text="p.course_name"></td>
+            <td x-text="App.METHOD_LABEL[p.method]"></td><td x-text="p.received_by"></td><td class="text-right" x-text="App.money(p.amount_cents)"></td></tr>
+        </template>
+      </tbody>
+    </table>
+    <button type="button" class="btn btn-ghost w-full" x-show="(r?.payments.length || 0) > limit" @click="limit += 200">Ver más</button>
+  </div>
+
+  <div class="card overflow-x-auto" x-show="tab === 'audit'">
+    <table class="table">
+      <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th><th>IP</th></tr></thead>
+      <tbody>
+        <template x-for="e in audit" :key="e.id">
+          <tr><td class="whitespace-nowrap" x-text="App.fmtDateTime(e.created_at)"></td><td x-text="e.username || '—'"></td>
+            <td class="whitespace-nowrap" x-text="e.action.replace(/_/g, ' ')"></td>
+            <td class="text-xs text-stone-600 max-w-md break-words" x-text="e.details || ''"></td><td class="text-xs" x-text="e.ip"></td></tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+function reports() {
+  const t = App.todayPR();
+  const monthStart = (d) => d.slice(0, 8) + '01';
+  const prevMonthEnd = App.addDays(monthStart(t), -1);
+  return {
+    from: App.addDays(t, -13), to: t, courseId: '', courses: [], r: null, busy: false, tab: 'summary', limit: 200, audit: [], isAdmin: false,
+    tabs: [{ key: 'summary', label: 'Resumen por curso' }, { key: 'attendance', label: 'Asistencia' }, { key: 'payments', label: 'Pagos' }, { key: 'audit', label: 'Auditoría', admin: true }],
+    presets: [
+      { label: 'Hoy', from: t, to: t },
+      { label: 'Últimos 7 días', from: App.addDays(t, -6), to: t },
+      { label: 'Últimas 2 semanas', from: App.addDays(t, -13), to: t },
+      { label: 'Este mes', from: monthStart(t), to: t },
+      { label: 'Mes pasado', from: monthStart(prevMonthEnd), to: prevMonthEnd },
+    ],
+    async init() {
+      App.me().then((r) => (this.isAdmin = r.user.role === 'admin'));
+      App.api('GET', '/api/courses?all=1').then((r) => (this.courses = r.courses));
+      await this.load();
+    },
+    preset(p) { this.from = p.from; this.to = p.to; this.load(); },
+    sum(list) { return list.reduce((a, p) => a + (p.amount_cents || 0), 0); },
+    async load() {
+      this.busy = true; this.limit = 200;
+      const q = new URLSearchParams({ from: this.from, to: this.to });
+      if (this.courseId) q.set('course_id', this.courseId);
+      try { this.r = await App.api('GET', `/api/reports/range?${q}`); } catch (e) { App.toast(e.message, 'error'); }
+      finally { this.busy = false; }
+    },
+    async loadAudit() {
+      try { this.audit = (await App.api('GET', '/api/audit?limit=300')).entries; } catch (e) { App.toast(e.message, 'error'); }
+    },
+    rows() {
+      const $ = (c) => (c == null ? '' : (c / 100).toFixed(2));
+      return {
+        Resumen: this.r.summary.map((s) => ({ Curso: s.course_name, Clases: s.sessions, Asistencias: s.attendances, Pagadas: s.paid_count,
+          Efectivo: $(s.efectivo), 'ATH Móvil': $(s.ath_movil), Tarjeta: $(s.tarjeta), Total: $(s.collected) })),
+        Asistencia: this.r.attendance.map((a) => ({ Fecha: a.date, Curso: a.course_name, Estudiante: a.student,
+          'Firmó': a.signed_by, 'Monto': $(a.amount_cents), 'Método': a.method ? App.METHOD_LABEL[a.method] : 'Pendiente', 'Cobró': a.received_by || '', Banda: a.band ? a.band_code : '' })),
+        Pagos: this.r.payments.map((p) => ({ 'Fecha cobro': p.local_date, Hora: App.fmtDateTime(p.created_at), Estudiante: p.student, Curso: p.course_name,
+          'Fecha clase': p.class_date, 'Método': App.METHOD_LABEL[p.method], 'Cobró': p.received_by, Monto: $(p.amount_cents) })),
+      };
+    },
+    exportCsv() {
+      const name = `${this.from}_a_${this.to}`;
+      if (this.tab === 'audit') return App.downloadCsv(`auditoria_${App.todayPR()}.csv`, this.audit.map((e) => ({ Fecha: e.created_at, Usuario: e.username, Accion: e.action, Detalle: e.details, IP: e.ip })));
+      const map = { summary: 'Resumen', attendance: 'Asistencia', payments: 'Pagos' };
+      App.downloadCsv(`${map[this.tab].toLowerCase()}_${name}.csv`, this.rows()[map[this.tab]]);
+    },
+    exportXlsx() {
+      const sheets = this.rows();
+      // Números como números en Excel
+      for (const rows of Object.values(sheets)) for (const row of rows) for (const k of ['Efectivo', 'ATH Móvil', 'Tarjeta', 'Total', 'Monto']) if (row[k] !== undefined && row[k] !== '') row[k] = Number(row[k]);
+      App.downloadXlsx(`reporte_${this.from}_a_${this.to}.xlsx`, sheets);
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

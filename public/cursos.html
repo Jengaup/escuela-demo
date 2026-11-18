@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cursos · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+</head>
+<body data-page="cursos" x-data="courses()" x-init="init()">
+<div id="shell"></div>
+
+<main class="max-w-6xl mx-auto p-4 space-y-4">
+  <div class="flex flex-wrap items-center gap-3">
+    <h1 class="text-2xl font-semibold text-stone-900">Cursos y matrículas</h1>
+    <label class="flex items-center gap-2 text-sm text-stone-600 ml-auto">
+      <input type="checkbox" class="w-5 h-5 accent-indigo-700" x-model="showInactive" @change="load()"> Ver inactivos</label>
+    <button type="button" class="btn btn-primary" x-show="isAdmin" @click="edit()">+ Nuevo curso</button>
+  </div>
+
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <template x-for="c in list" :key="c.id">
+      <div class="card p-4 flex flex-col gap-3" :class="!c.active && 'opacity-60'">
+        <div class="flex items-start gap-2">
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-accent" x-text="c.program"></div>
+            <div class="text-lg font-semibold text-stone-900" x-text="c.name"></div>
+          </div>
+          <span class="ml-auto pill bg-stone-200 text-stone-600" x-show="!c.active">Inactivo</span>
+        </div>
+        <dl class="text-sm text-stone-600 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+          <dt class="text-stone-400">Horario</dt><dd x-text="`${App.daysLabel(c.days)} · ${App.fmtTime(c.start_time)} – ${App.fmtTime(c.end_time)}`"></dd>
+          <dt class="text-stone-400">Instructor</dt><dd x-text="c.instructor"></dd>
+          <dt class="text-stone-400">Precio</dt><dd x-text="`${App.money(c.price_cents)} por clase`"></dd>
+          <dt class="text-stone-400">Matrícula</dt><dd x-text="`${c.enrolled} activos`"></dd>
+        </dl>
+        <div class="flex gap-2 mt-auto">
+          <button type="button" class="btn btn-secondary flex-1" @click="openRoster(c)">Matriculados</button>
+          <button type="button" class="btn btn-secondary" x-show="isAdmin" @click="edit(c)">Editar</button>
+        </div>
+      </div>
+    </template>
+  </div>
+  <p class="text-center text-stone-500 py-6" x-show="loaded && !list.length">No hay cursos.</p>
+</main>
+
+<!-- Editar curso -->
+<div class="modal-backdrop" x-show="form" x-cloak @keydown.escape.window="form = null" @click.self="form = null">
+  <form class="modal p-5 space-y-4" x-show="form" role="dialog" aria-modal="true" aria-labelledby="cTitle" @submit.prevent="save()" novalidate>
+    <template x-if="form">
+      <div class="space-y-4">
+        <div class="flex"><h2 id="cTitle" class="text-xl font-semibold" x-text="form.id ? 'Editar curso' : 'Nuevo curso'"></h2>
+          <button type="button" class="ml-auto btn-ghost text-2xl leading-none" @click="form = null" aria-label="Cerrar">&times;</button></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label" for="pg">Programa</label>
+            <select id="pg" class="input" x-model.number="form.program_id"><template x-for="p in catalog.programs" :key="p.id"><option :value="p.id" x-text="p.name" :selected="p.id === form.program_id"></option></template></select></div>
+          <div><label class="label" for="lv">Nivel</label>
+            <select id="lv" class="input" x-model.number="form.level_id"><template x-for="l in catalog.levels" :key="l.id"><option :value="l.id" x-text="l.name" :selected="l.id === form.level_id"></option></template></select></div>
+        </div>
+        <fieldset>
+          <legend class="label">Días</legend>
+          <div class="grid grid-cols-7 gap-1">
+            <template x-for="(d, i) in App.DAY_NAMES" :key="i">
+              <button type="button" class="btn px-0 text-sm" :class="form.days.includes(i) ? 'btn-primary' : 'btn-secondary'" @click="toggleDay(i)" x-text="d" :aria-pressed="form.days.includes(i)"></button>
+            </template>
+          </div>
+          <p class="field-error" x-text="errors.days"></p>
+        </fieldset>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label" for="st">Hora inicio</label><input id="st" type="time" class="input" x-model="form.start_time"></div>
+          <div><label class="label" for="et">Hora fin</label><input id="et" type="time" class="input" x-model="form.end_time"><p class="field-error" x-text="errors.end_time"></p></div>
+          <div><label class="label" for="pr">Precio por clase ($)</label><input id="pr" class="input" inputmode="decimal" x-model="form.price"><p class="field-error" x-text="errors.price"></p></div>
+          <div><label class="label" for="in">Instructor</label><input id="in" class="input" x-model="form.instructor" maxlength="100"><p class="field-error" x-text="errors.instructor"></p></div>
+        </div>
+        <label class="flex items-center gap-2"><input type="checkbox" class="w-5 h-5 accent-indigo-700" x-model="form.active"> Curso activo</label>
+        <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" role="alert"></p>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-danger" x-show="form.id" @click="remove()">Borrar</button>
+          <button type="button" class="btn btn-secondary ml-auto" @click="form = null">Cancelar</button>
+          <button class="btn btn-primary" :disabled="busy">Guardar</button>
+        </div>
+      </div>
+    </template>
+  </form>
+</div>
+
+<!-- Matriculados -->
+<div class="modal-backdrop" x-show="roster" x-cloak @keydown.escape.window="roster = null" @click.self="roster = null">
+  <div class="modal p-5 space-y-4" role="dialog" aria-modal="true" aria-labelledby="rTitle">
+    <template x-if="roster">
+      <div class="space-y-4">
+        <div class="flex items-start"><div>
+          <h2 id="rTitle" class="text-xl font-semibold" x-text="roster.course.name"></h2>
+          <p class="text-sm text-stone-500" x-text="`${roster.list.filter(e => e.status === 'activo').length} matriculados activos`"></p></div>
+          <button type="button" class="ml-auto btn-ghost text-2xl leading-none" @click="roster = null" aria-label="Cerrar">&times;</button></div>
+        <div class="flex gap-2">
+          <select class="input" x-model.number="addStudent" aria-label="Estudiante a matricular">
+            <option value="">Añadir estudiante…</option>
+            <template x-for="s in candidates" :key="s.id"><option :value="s.id" x-text="`${s.first_name} ${s.last_name}`"></option></template>
+          </select>
+          <button type="button" class="btn btn-primary" :disabled="!addStudent" @click="enroll()">Matricular</button>
+        </div>
+        <ul class="divide-y divide-stone-100 border border-stone-200 rounded-xl">
+          <template x-for="e in roster.list" :key="e.id">
+            <li class="flex items-center gap-3 px-4 py-2 min-h-[56px]">
+              <a class="flex-1 min-w-0" :href="`/estudiantes?id=${e.student_id}`">
+                <div class="font-medium truncate" :class="e.status === 'inactivo' && 'text-stone-400 line-through'" x-text="`${e.first_name} ${e.last_name}`"></div>
+                <div class="text-xs text-stone-500" x-text="`Desde ${App.fmtDate(e.enrolled_on)}${e.phone ? ' · ' + e.phone : ''}`"></div>
+              </a>
+              <button type="button" class="btn text-sm" :class="e.status === 'activo' ? 'btn-secondary' : 'btn-primary'"
+                @click="setStatus(e, e.status === 'activo' ? 'inactivo' : 'activo')" x-text="e.status === 'activo' ? 'Dar de baja' : 'Reactivar'"></button>
+            </li>
+          </template>
+        </ul>
+      </div>
+    </template>
+  </div>
+</div>
+
+<script>
+function courses() {
+  return {
+    list: [], loaded: false, showInactive: false, isAdmin: false, catalog: { programs: [], levels: [] },
+    form: null, errors: {}, error: '', busy: false,
+    roster: null, students: [], addStudent: '',
+    async init() {
+      App.me().then((r) => (this.isAdmin = r.user.role === 'admin'));
+      App.api('GET', '/api/catalog').then((r) => (this.catalog = r));
+      await this.load();
+    },
+    async load() {
+      try { this.list = (await App.api('GET', `/api/courses${this.showInactive ? '?all=1' : ''}`)).courses; }
+      catch (e) { App.toast(e.message, 'error'); }
+      this.loaded = true;
+    },
+    edit(c) {
+      this.errors = {}; this.error = '';
+      this.form = c
+        ? { id: c.id, program_id: c.program_id, level_id: c.level_id, days: c.days.split(',').map(Number), start_time: c.start_time, end_time: c.end_time,
+            price: (c.price_cents / 100).toFixed(2), instructor: c.instructor, active: !!c.active }
+        : { id: null, program_id: 1, level_id: 1, days: [], start_time: '18:00', end_time: '20:00', price: '25.00', instructor: '', active: true };
+    },
+    toggleDay(i) { this.form.days = this.form.days.includes(i) ? this.form.days.filter((d) => d !== i) : [...this.form.days, i]; },
+    async save() {
+      this.busy = true; this.errors = {}; this.error = '';
+      try {
+        if (this.form.id) await App.api('PUT', `/api/courses/${this.form.id}`, this.form);
+        else await App.api('POST', '/api/courses', this.form);
+        App.toast('Curso guardado'); this.form = null; this.load();
+      } catch (e) { this.errors = e.details || {}; this.error = e.message; }
+      finally { this.busy = false; }
+    },
+    async remove() {
+      if (!confirm('¿Borrar este curso?')) return;
+      try { await App.api('DELETE', `/api/courses/${this.form.id}`); App.toast('Curso borrado'); this.form = null; this.load(); }
+      catch (e) { this.error = e.message; }
+    },
+    get candidates() {
+      const active = new Set((this.roster?.list || []).filter((e) => e.status === 'activo').map((e) => e.student_id));
+      return this.students.filter((s) => !active.has(s.id));
+    },
+    async openRoster(c) {
+      try {
+        const [r, s] = await Promise.all([
+          App.api('GET', `/api/courses/${c.id}/enrollments`),
+          this.students.length ? null : App.api('GET', '/api/students?status=activo'),
+        ]);
+        if (s) this.students = s.students.sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'));
+        this.roster = { course: c, list: r.enrollments };
+        this.addStudent = '';
+      } catch (e) { App.toast(e.message, 'error'); }
+    },
+    async enroll() {
+      try { await App.api('POST', '/api/enrollments', { student_id: this.addStudent, course_id: this.roster.course.id }); App.toast('Matriculado'); await this.openRoster(this.roster.course); this.load(); }
+      catch (e) { App.toast(e.message, 'error'); }
+    },
+    async setStatus(e, status) {
+      try { await App.api('PUT', `/api/enrollments/${e.id}`, { status }); await this.openRoster(this.roster.course); this.load(); }
+      catch (err) { App.toast(err.message, 'error'); }
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

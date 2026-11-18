@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cuadre de caja · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+</head>
+<body data-page="caja" x-data="cash()" x-init="init()">
+<div id="shell"></div>
+
+<main class="max-w-5xl mx-auto p-4 space-y-4">
+  <div class="flex flex-wrap items-center gap-2">
+    <div class="mr-auto">
+      <h1 class="text-2xl font-semibold text-stone-900">Cuadre de caja</h1>
+      <p class="text-stone-500" x-text="App.fmtDate(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })"></p>
+    </div>
+    <div class="flex items-center gap-1 no-print">
+      <button type="button" class="btn btn-secondary px-3" @click="shift(-1)" aria-label="Día anterior">‹</button>
+      <input type="date" class="input w-auto" x-model="date" @change="load()" :max="App.todayPR()" aria-label="Fecha">
+      <button type="button" class="btn btn-secondary px-3" @click="shift(1)" :disabled="date >= App.todayPR()" aria-label="Día siguiente">›</button>
+    </div>
+    <button type="button" class="btn btn-primary no-print" @click="window.print()">Imprimir</button>
+  </div>
+
+  <div class="hidden print:block text-sm text-stone-600">Escuela de Artes · Modelaje · Costura · Cocina — Impreso <span x-text="App.fmtDateTime(new Date().toISOString())"></span></div>
+
+  <section class="grid gap-3 grid-cols-2 md:grid-cols-4 print-break">
+    <template x-for="m in ['efectivo','ath_movil','tarjeta']" :key="m">
+      <div class="card p-4">
+        <div class="text-sm text-stone-500" x-text="App.METHOD_LABEL[m]"></div>
+        <div class="text-2xl font-semibold mt-1" x-text="App.money(d.methods?.[m])"></div>
+        <div class="text-xs text-stone-500" x-text="`${d.counts?.[m] ?? 0} cobro(s)`"></div>
+      </div>
+    </template>
+    <div class="card p-4 border-accent bg-accent-soft">
+      <div class="text-sm text-stone-600">Total del día</div>
+      <div class="text-2xl font-semibold text-accent mt-1" x-text="App.money(d.total)"></div>
+      <div class="text-xs text-stone-500" x-text="`${d.payments?.length ?? 0} cobro(s)`"></div>
+    </div>
+  </section>
+
+  <section class="card p-4 grid gap-3 sm:grid-cols-3 items-end print-break">
+    <div>
+      <label class="label" for="counted">Efectivo contado en caja ($)</label>
+      <input id="counted" class="input" inputmode="decimal" x-model="counted" placeholder="0.00">
+    </div>
+    <div>
+      <div class="text-sm text-stone-500">Efectivo según sistema</div>
+      <div class="text-xl font-semibold" x-text="App.money(d.methods?.efectivo)"></div>
+    </div>
+    <div x-show="counted !== ''">
+      <div class="text-sm text-stone-500">Diferencia</div>
+      <div class="text-xl font-semibold" :class="diff === 0 ? 'text-emerald-700' : 'text-red-700'"
+        x-text="diff === 0 ? 'Cuadra ✓' : (diff > 0 ? 'Sobran ' : 'Faltan ') + App.money(Math.abs(diff))"></div>
+    </div>
+  </section>
+
+  <section class="card overflow-hidden print-break">
+    <h2 class="font-semibold px-4 pt-4 pb-2">Por persona que cobró</h2>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead><tr><th>Staff</th><th class="text-right">Efectivo</th><th class="text-right">ATH Móvil</th><th class="text-right">Tarjeta</th><th class="text-right">Total</th></tr></thead>
+        <tbody>
+          <template x-for="s in d.staff || []" :key="s.name">
+            <tr><td x-text="`${s.name} (${s.n})`"></td>
+              <td class="text-right" x-text="App.money(s.efectivo)"></td><td class="text-right" x-text="App.money(s.ath_movil)"></td>
+              <td class="text-right" x-text="App.money(s.tarjeta)"></td><td class="text-right font-semibold" x-text="App.money(s.total)"></td></tr>
+          </template>
+          <tr x-show="d.staff?.length" class="bg-stone-50 font-semibold"><td>Total</td>
+            <td class="text-right" x-text="App.money(d.methods?.efectivo)"></td><td class="text-right" x-text="App.money(d.methods?.ath_movil)"></td>
+            <td class="text-right" x-text="App.money(d.methods?.tarjeta)"></td><td class="text-right" x-text="App.money(d.total)"></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="px-4 pb-4 text-stone-500" x-show="d.staff && !d.staff.length">No hubo cobros este día.</p>
+  </section>
+
+  <section class="card overflow-hidden border-amber-200" x-show="d.pending?.length">
+    <h2 class="font-semibold px-4 pt-4 pb-2 text-amber-900">Asistieron sin pagar (<span x-text="d.pending?.length"></span>)</h2>
+    <ul class="px-4 pb-4 text-sm space-y-1">
+      <template x-for="p in d.pending || []" :key="p.id">
+        <li class="flex"><span x-text="`${p.student} · ${p.course_name}`"></span><span class="ml-auto text-stone-500" x-text="App.money(p.price_cents)"></span></li>
+      </template>
+    </ul>
+  </section>
+
+  <section class="card overflow-hidden">
+    <h2 class="font-semibold px-4 pt-4 pb-2">Detalle de cobros</h2>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead><tr><th>Hora</th><th>Estudiante</th><th>Clase</th><th>Método</th><th>Cobró</th><th class="text-right">Monto</th></tr></thead>
+        <tbody>
+          <template x-for="p in d.payments || []" :key="p.id">
+            <tr><td class="whitespace-nowrap" x-text="new Date(p.created_at).toLocaleTimeString('es-PR', { timeZone: 'America/Puerto_Rico', hour: 'numeric', minute: '2-digit' })"></td>
+              <td x-text="p.student"></td><td x-text="p.course_name"></td><td x-text="App.METHOD_LABEL[p.method]"></td>
+              <td x-text="p.received_by"></td><td class="text-right" x-text="App.money(p.amount_cents)"></td></tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="hidden print:grid grid-cols-2 gap-12 pt-12 text-sm">
+    <div class="border-t border-stone-400 pt-1">Preparado por</div>
+    <div class="border-t border-stone-400 pt-1">Verificado por</div>
+  </section>
+</main>
+
+<script>
+function cash() {
+  return {
+    date: App.todayPR(), d: {}, counted: '',
+    get diff() { return Math.round(parseFloat(this.counted || 0) * 100) - (this.d.methods?.efectivo || 0); },
+    init() {
+      const q = new URLSearchParams(location.search).get('date');
+      if (q) this.date = q;
+      this.load();
+    },
+    shift(n) { this.date = App.addDays(this.date, n); this.load(); },
+    async load() {
+      this.counted = '';
+      history.replaceState(null, '', `?date=${this.date}`);
+      try { this.d = await App.api('GET', `/api/reports/cash?date=${this.date}`); } catch (e) { App.toast(e.message, 'error'); }
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

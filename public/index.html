@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inicio · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+</head>
+<body data-page="inicio" x-data="dash()" x-init="load()">
+<div id="shell"></div>
+
+<main class="max-w-6xl mx-auto p-4 space-y-4">
+  <div class="flex flex-wrap items-end gap-3">
+    <div>
+      <h1 class="text-2xl font-semibold text-stone-900">Resumen de hoy</h1>
+      <p class="text-stone-500" x-text="App.fmtDate(d.today, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })"></p>
+    </div>
+    <a href="/checkin" class="btn btn-primary btn-lg ml-auto">Ir al check-in</a>
+  </div>
+
+  <section class="grid gap-3 grid-cols-2 lg:grid-cols-4" aria-label="Indicadores">
+    <div class="card p-4">
+      <div class="text-sm text-stone-500">Asistentes hoy</div>
+      <div class="text-3xl font-semibold text-stone-900 mt-1"><span x-text="d.attended ?? '–'"></span>
+        <span class="text-base font-normal text-stone-400" x-text="`de ${d.enrolled ?? 0}`"></span></div>
+    </div>
+    <div class="card p-4">
+      <div class="text-sm text-stone-500">Cobrado hoy</div>
+      <div class="text-3xl font-semibold text-accent mt-1" x-text="App.money(d.total)"></div>
+    </div>
+    <div class="card p-4">
+      <div class="text-sm text-stone-500">Clases hoy</div>
+      <div class="text-3xl font-semibold text-stone-900 mt-1" x-text="d.sessions?.length ?? '–'"></div>
+    </div>
+    <div class="card p-4">
+      <div class="text-sm text-stone-500">Estudiantes activos</div>
+      <div class="text-3xl font-semibold text-stone-900 mt-1" x-text="d.counts?.students ?? '–'"></div>
+    </div>
+  </section>
+
+  <div class="grid gap-4 lg:grid-cols-3">
+    <section class="card lg:col-span-2 overflow-hidden">
+      <h2 class="font-semibold px-4 pt-4 pb-2">Clases de hoy</h2>
+      <div class="divide-y divide-stone-100">
+        <template x-for="s in d.sessions || []" :key="s.id">
+          <a :href="`/checkin?s=${s.id}`" class="flex items-center gap-4 px-4 py-3 hover:bg-stone-50 min-h-[64px]">
+            <div class="w-24 shrink-0 text-sm text-stone-500" x-text="App.fmtTime(s.start_time)"></div>
+            <div class="min-w-0 flex-1">
+              <div class="font-medium text-stone-900" x-text="s.course_name"></div>
+              <div class="text-sm text-stone-500" x-text="s.instructor"></div>
+            </div>
+            <div class="text-right">
+              <div class="font-medium" x-text="`${s.attended}/${s.enrolled}`"></div>
+              <div class="text-sm text-stone-500" x-text="App.money(s.collected)"></div>
+            </div>
+          </a>
+        </template>
+        <p class="px-4 py-6 text-stone-500" x-show="d.sessions && !d.sessions.length">No hay clases programadas hoy.</p>
+      </div>
+    </section>
+
+    <section class="card p-4 space-y-3">
+      <h2 class="font-semibold">Cobrado hoy por método</h2>
+      <template x-for="m in ['efectivo','ath_movil','tarjeta']" :key="m">
+        <div>
+          <div class="flex justify-between text-sm"><span x-text="App.METHOD_LABEL[m]"></span><strong x-text="App.money(d.methods?.[m])"></strong></div>
+          <div class="h-2 bg-stone-100 rounded-full mt-1 overflow-hidden">
+            <div class="h-full bg-accent rounded-full" :style="`width:${d.total ? (d.methods[m] / d.total * 100) : 0}%`"></div>
+          </div>
+        </div>
+      </template>
+      <div class="flex justify-between border-t border-stone-200 pt-3 font-semibold"><span>Total</span><span x-text="App.money(d.total)"></span></div>
+      <a href="/caja" class="btn btn-secondary w-full">Ver cuadre de caja</a>
+    </section>
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-3">
+    <section class="card p-4 lg:col-span-2">
+      <h2 class="font-semibold mb-3">Cobros de los últimos 7 días</h2>
+      <div class="flex items-end gap-2 h-40" role="img" :aria-label="`Cobros diarios, máximo ${App.money(maxWeek)}`">
+        <template x-for="w in d.week || []" :key="w.date">
+          <div class="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+            <span class="text-xs text-stone-600" x-text="w.total ? '$' + Math.round(w.total / 100) : ''"></span>
+            <div class="w-full rounded-t-md" :class="w.date === d.today ? 'bg-accent' : 'bg-stone-300'"
+              :style="`height:${maxWeek ? Math.max(2, w.total / maxWeek * 100) : 2}%`" :title="App.money(w.total)"></div>
+            <span class="text-xs text-stone-500" x-text="App.DAY_NAMES[new Date(w.date + 'T12:00:00').getDay()]"></span>
+          </div>
+        </template>
+      </div>
+    </section>
+    <section class="card p-4">
+      <h2 class="font-semibold mb-2">Últimos check-ins</h2>
+      <ul class="space-y-2 text-sm">
+        <template x-for="a in d.recent || []" :key="a.id">
+          <li class="flex gap-2">
+            <span class="w-2 h-2 rounded-full mt-1.5 shrink-0" :class="a.method ? 'bg-emerald-500' : 'bg-amber-400'"></span>
+            <div class="min-w-0">
+              <div class="font-medium truncate" x-text="a.student"></div>
+              <div class="text-stone-500" x-text="`${a.course_name} · ${App.fmtDateTime(a.created_at)}${a.method ? ' · ' + App.METHOD_LABEL[a.method] : ' · sin pago'}`"></div>
+            </div>
+          </li>
+        </template>
+        <li class="text-stone-500" x-show="d.recent && !d.recent.length">Todavía no hay check-ins hoy.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section class="card p-4 flex flex-wrap items-center gap-3 border-amber-200 bg-amber-50" x-show="d.demo && isAdmin" x-cloak>
+    <div class="flex-1 min-w-[14rem]">
+      <h2 class="font-semibold text-amber-900">Modo demo</h2>
+      <p class="text-sm text-amber-800">Borra estudiantes, cursos, asistencias y pagos, y vuelve a cargar los datos de ejemplo. Los usuarios no se tocan.</p>
+    </div>
+    <button type="button" class="btn btn-danger" @click="reset()" :disabled="resetting" x-text="resetting ? 'Reseteando…' : 'Resetear datos demo'"></button>
+  </section>
+</main>
+
+<script>
+function dash() {
+  return {
+    d: {}, isAdmin: false, resetting: false,
+    get maxWeek() { return Math.max(0, ...(this.d.week || []).map((w) => w.total)); },
+    async load() {
+      App.me().then((r) => (this.isAdmin = r.user.role === 'admin'));
+      try { this.d = await App.api('GET', '/api/dashboard'); } catch (e) { App.toast(e.message, 'error'); }
+    },
+    async reset() {
+      if (!confirm('¿Seguro? Se borrarán todos los estudiantes, cursos, asistencias y pagos y se cargarán los datos demo.')) return;
+      this.resetting = true;
+      try {
+        await App.api('POST', '/api/admin/reset-demo', {});
+        App.toast('Datos demo restaurados');
+        await this.load();
+      } catch (e) { App.toast(e.message, 'error'); }
+      finally { this.resetting = false; }
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

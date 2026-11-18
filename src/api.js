@@ -4,9 +4,13 @@ import { getSessionUser } from './auth.js';
 import * as auth from './routes/auth.js';
 import * as users from './routes/users.js';
 import * as checkin from './routes/checkin.js';
+import * as students from './routes/students.js';
+import * as courses from './routes/courses.js';
+import * as dashboard from './routes/dashboard.js';
+import * as reports from './routes/reports.js';
 
 const router = new Router();
-for (const mod of [auth, users, checkin]) mod.register(router);
+for (const mod of [auth, users, checkin, students, courses, dashboard, reports]) mod.register(router);
 
 export async function handleApi(request, env) {
   const url = new URL(request.url);

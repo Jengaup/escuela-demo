@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Estudiantes · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+</head>
+<body data-page="estudiantes" x-data="students()" x-init="init()">
+<div id="shell"></div>
+
+<main class="max-w-6xl mx-auto p-4 space-y-4">
+  <div class="flex flex-wrap items-center gap-3">
+    <h1 class="text-2xl font-semibold text-stone-900">Estudiantes</h1>
+    <button type="button" class="btn btn-primary ml-auto" @click="openNew()">+ Nuevo estudiante</button>
+  </div>
+
+  <div class="flex flex-wrap gap-2">
+    <input type="search" class="input sm:max-w-sm" placeholder="Buscar por nombre, teléfono, email o encargado…" x-model="q"
+      @input.debounce.300ms="load()" aria-label="Buscar">
+    <select class="input w-auto" x-model="status" @change="load()" aria-label="Estado">
+      <option value="activo">Activos</option><option value="inactivo">Inactivos</option><option value="todos">Todos</option>
+    </select>
+    <select class="input w-auto" x-model="courseFilter" @change="load()" aria-label="Curso">
+      <option value="">Todos los cursos</option>
+      <template x-for="c in courses" :key="c.id"><option :value="c.id" x-text="c.name"></option></template>
+    </select>
+  </div>
+
+  <div class="card overflow-hidden">
+    <div class="hidden md:grid grid-cols-12 gap-3 px-4 py-2 bg-stone-50 border-b border-stone-200 text-xs font-semibold uppercase tracking-wide text-stone-500">
+      <div class="col-span-4">Nombre</div><div class="col-span-3">Contacto</div><div class="col-span-3">Cursos</div><div class="col-span-2">Última visita</div>
+    </div>
+    <template x-for="s in list" :key="s.id">
+      <button type="button" class="w-full text-left grid md:grid-cols-12 gap-x-3 gap-y-0.5 px-4 py-3 border-b border-stone-100 hover:bg-stone-50 min-h-[60px]" @click="open(s.id)">
+        <div class="md:col-span-4">
+          <div class="font-medium text-stone-900" x-text="`${s.first_name} ${s.last_name}`"></div>
+          <div class="text-sm text-stone-500" x-text="[App.age(s.birth_date) !== null ? App.age(s.birth_date) + ' años' : '', s.guardian_name ? 'Enc.: ' + s.guardian_name : ''].filter(Boolean).join(' · ')"></div>
+        </div>
+        <div class="md:col-span-3 text-sm text-stone-600"><div x-text="s.phone || ''"></div><div class="truncate text-stone-500" x-text="s.email || ''"></div></div>
+        <div class="md:col-span-3 text-sm text-stone-600" x-text="s.courses || 'Sin matrícula'"></div>
+        <div class="md:col-span-2 text-sm text-stone-500">
+          <span x-text="s.last_visit ? App.fmtDate(s.last_visit) : '—'"></span>
+          <span class="pill bg-stone-200 text-stone-600 ml-1" x-show="!s.active">Inactivo</span>
+        </div>
+      </button>
+    </template>
+    <p class="p-6 text-center text-stone-500" x-show="loaded && !list.length">No se encontraron estudiantes.</p>
+  </div>
+  <p class="text-sm text-stone-500" x-text="`${list.length} estudiante(s)`"></p>
+</main>
+
+<!-- Detalle / edición -->
+<div class="modal-backdrop" x-show="form" x-cloak @keydown.escape.window="form = null" @click.self="form = null">
+  <div class="modal sm:max-w-3xl" role="dialog" aria-modal="true" aria-labelledby="sTitle">
+    <template x-if="form">
+      <div>
+        <div class="sticky top-0 bg-white z-10 px-5 pt-5 border-b border-stone-200">
+          <div class="flex items-start gap-3">
+            <div>
+              <h2 id="sTitle" class="text-xl font-semibold" x-text="form.id ? `${form.first_name} ${form.last_name}` : 'Nuevo estudiante'"></h2>
+              <p class="text-sm text-stone-500" x-show="detail" x-text="detail && `${detail.totals.classes} clases · ${App.money(detail.totals.paid_cents)} pagado${detail.totals.unpaid ? ' · ' + detail.totals.unpaid + ' sin pagar' : ''}`"></p>
+            </div>
+            <button type="button" class="ml-auto btn-ghost text-2xl leading-none" @click="form = null" aria-label="Cerrar">&times;</button>
+          </div>
+          <div class="flex gap-1 mt-3 overflow-x-auto scrollbar-none" x-show="form.id">
+            <template x-for="t in [['datos','Datos'],['cursos','Cursos'],['historial','Historial']]" :key="t[0]">
+              <button type="button" class="px-4 py-2.5 text-sm font-medium border-b-2" :class="tab === t[0] ? 'border-accent text-accent' : 'border-transparent text-stone-500'"
+                @click="tab = t[0]" x-text="t[1]"></button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Datos -->
+        <form class="p-5 space-y-4" x-show="tab === 'datos'" @submit.prevent="save()" novalidate>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div><label class="label" for="fn">Nombre *</label><input id="fn" class="input" x-model="form.first_name" maxlength="60" required>
+              <p class="field-error" x-text="errors.first_name"></p></div>
+            <div><label class="label" for="ln">Apellidos *</label><input id="ln" class="input" x-model="form.last_name" maxlength="80" required>
+              <p class="field-error" x-text="errors.last_name"></p></div>
+            <div><label class="label" for="bd">Fecha de nacimiento</label><input id="bd" type="date" class="input" x-model="form.birth_date">
+              <p class="field-error" x-text="errors.birth_date"></p></div>
+            <div><label class="label" for="gn">Encargado principal</label><input id="gn" class="input" x-model="form.guardian_name" maxlength="100"
+              :placeholder="App.age(form.birth_date) !== null && App.age(form.birth_date) < 18 ? 'Requerido para menores' : 'Opcional'"></div>
+            <div><label class="label" for="ph">Teléfono</label><input id="ph" class="input" type="tel" inputmode="tel" x-model="form.phone" placeholder="(787) 555-1234">
+              <p class="field-error" x-text="errors.phone"></p></div>
+            <div><label class="label" for="em">Email</label><input id="em" class="input" type="email" x-model="form.email">
+              <p class="field-error" x-text="errors.email"></p></div>
+          </div>
+          <div><label class="label" for="nt">Notas</label><textarea id="nt" class="input min-h-[80px]" x-model="form.notes" maxlength="1000"
+            placeholder="Alergias, permisos, observaciones…"></textarea></div>
+
+          <fieldset class="space-y-2">
+            <div class="flex items-center"><legend class="font-semibold">Encargados / contactos</legend>
+              <button type="button" class="ml-auto btn-ghost text-sm text-accent" @click="form.guardians.push({ name: '', relationship: '', phone: '', email: '' })"
+                x-show="form.guardians.length < 5">+ Añadir</button></div>
+            <template x-for="(g, i) in form.guardians" :key="i">
+              <div class="grid gap-2 sm:grid-cols-12 items-start bg-stone-50 rounded-xl p-3">
+                <input class="input sm:col-span-4" placeholder="Nombre" x-model="g.name" aria-label="Nombre del encargado">
+                <select class="input sm:col-span-3" x-model="g.relationship" aria-label="Relación">
+                  <option value="">Relación…</option>
+                  <template x-for="r in ['Madre','Padre','Abuela','Abuelo','Tía','Tío','Tutor legal','Otro']"><option x-text="r"></option></template>
+                </select>
+                <input class="input sm:col-span-4" placeholder="Teléfono" type="tel" x-model="g.phone" aria-label="Teléfono del encargado">
+                <button type="button" class="btn btn-ghost sm:col-span-1 text-red-700" @click="form.guardians.splice(i, 1)" aria-label="Quitar">&times;</button>
+              </div>
+            </template>
+          </fieldset>
+
+          <div x-show="!form.id" class="space-y-2">
+            <p class="font-semibold">Matricular en</p>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="c in courses" :key="c.id">
+                <label class="flex items-center gap-2 card px-3 py-2 cursor-pointer min-h-[48px]">
+                  <input type="checkbox" class="w-5 h-5 accent-indigo-700" :value="c.id" x-model.number="form.course_ids">
+                  <span class="text-sm" x-text="`${c.name} · ${App.daysLabel(c.days)}`"></span>
+                </label>
+              </template>
+            </div>
+          </div>
+
+          <label class="flex items-center gap-2" x-show="form.id">
+            <input type="checkbox" class="w-5 h-5 accent-indigo-700" x-model="form.active"> <span>Estudiante activo</span>
+          </label>
+
+          <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" role="alert"></p>
+          <div class="flex flex-wrap gap-2 pt-2">
+            <button type="button" class="btn btn-danger" x-show="form.id && isAdmin" @click="remove()">Borrar</button>
+            <button type="button" class="btn btn-secondary ml-auto" @click="form = null">Cancelar</button>
+            <button class="btn btn-primary" :disabled="busy" x-text="busy ? 'Guardando…' : 'Guardar'"></button>
+          </div>
+        </form>
+
+        <!-- Cursos -->
+        <div class="p-5 space-y-3" x-show="tab === 'cursos'">
+          <template x-for="e in detail?.enrollments || []" :key="e.id">
+            <div class="flex items-center gap-3 card px-4 py-3">
+              <div class="flex-1">
+                <div class="font-medium" x-text="e.course_name"></div>
+                <div class="text-sm text-stone-500" x-text="`${App.daysLabel(e.days)} · ${App.fmtTime(e.start_time)} · ${App.money(e.price_cents)}/clase · desde ${App.fmtDate(e.enrolled_on)}`"></div>
+              </div>
+              <button type="button" class="btn text-sm" :class="e.status === 'activo' ? 'btn-secondary' : 'btn-primary'"
+                @click="setEnrollment(e, e.status === 'activo' ? 'inactivo' : 'activo')" x-text="e.status === 'activo' ? 'Dar de baja' : 'Reactivar'"></button>
+            </div>
+          </template>
+          <p class="text-stone-500" x-show="!detail?.enrollments.length">Sin matrículas.</p>
+          <div class="flex gap-2 pt-2">
+            <select class="input" x-model.number="enrollCourse" aria-label="Curso a matricular">
+              <option value="">Matricular en otro curso…</option>
+              <template x-for="c in courses.filter(c => !detail?.enrollments.some(e => e.course_id === c.id && e.status === 'activo'))" :key="c.id">
+                <option :value="c.id" x-text="`${c.name} · ${App.daysLabel(c.days)}`"></option>
+              </template>
+            </select>
+            <button type="button" class="btn btn-primary" :disabled="!enrollCourse" @click="enroll()">Matricular</button>
+          </div>
+        </div>
+
+        <!-- Historial -->
+        <div class="p-5" x-show="tab === 'historial'">
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead><tr><th>Fecha</th><th>Clase</th><th>Firma</th><th>Pago</th><th>Banda</th></tr></thead>
+              <tbody>
+                <template x-for="h in detail?.history || []" :key="h.attendance_id">
+                  <tr>
+                    <td class="whitespace-nowrap" x-text="App.fmtDate(h.date)"></td>
+                    <td x-text="h.course_name"></td>
+                    <td><button type="button" class="text-accent underline text-sm" @click="viewSig(h)" x-text="h.signed_by === 'encargado' ? 'Encargado' : 'Estudiante'"></button></td>
+                    <td class="whitespace-nowrap">
+                      <span x-show="h.method" x-text="`${App.money(h.amount_cents)} · ${App.METHOD_LABEL[h.method]}`"></span>
+                      <span x-show="!h.method" class="pill bg-amber-100 text-amber-800">Pendiente</span>
+                    </td>
+                    <td x-text="h.band_delivered ? '✓' : '—'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-stone-500 py-4" x-show="!detail?.history.length">Sin asistencias registradas.</p>
+          <div x-show="sig" class="mt-3 card p-3">
+            <div class="flex items-center text-sm mb-2"><span x-text="sigLabel"></span><button type="button" class="ml-auto btn-ghost" @click="sig = ''">Cerrar</button></div>
+            <img :src="sig" alt="Firma" class="max-h-40 border rounded-lg border-stone-200">
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>
+
+<script>
+function students() {
+  const blank = () => ({ id: null, first_name: '', last_name: '', birth_date: '', guardian_name: '', phone: '', email: '', notes: '', active: true, guardians: [], course_ids: [] });
+  return {
+    list: [], loaded: false, q: '', status: 'activo', courseFilter: '', courses: [], isAdmin: false,
+    form: null, detail: null, tab: 'datos', errors: {}, error: '', busy: false, enrollCourse: '', sig: '', sigLabel: '',
+    async init() {
+      App.me().then((r) => (this.isAdmin = r.user.role === 'admin'));
+      App.api('GET', '/api/courses').then((r) => (this.courses = r.courses));
+      await this.load();
+      const id = Number(new URLSearchParams(location.search).get('id'));
+      if (id) this.open(id);
+    },
+    async load() {
+      const p = new URLSearchParams({ q: this.q, status: this.status });
+      if (this.courseFilter) p.set('course_id', this.courseFilter);
+      try { this.list = (await App.api('GET', `/api/students?${p}`)).students.sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es')); }
+      catch (e) { App.toast(e.message, 'error'); }
+      this.loaded = true;
+    },
+    openNew() { this.form = blank(); this.detail = null; this.tab = 'datos'; this.errors = {}; this.error = ''; },
+    async open(id) {
+      try {
+        const d = await App.api('GET', `/api/students/${id}`);
+        this.detail = d;
+        this.form = { ...blank(), ...d.student, active: !!d.student.active, birth_date: d.student.birth_date || '',
+          guardians: d.guardians.map((g) => ({ name: g.name, relationship: g.relationship || '', phone: g.phone || '', email: g.email || '' })) };
+        for (const k of ['guardian_name', 'phone', 'email', 'notes']) this.form[k] ||= '';
+        this.tab = 'datos'; this.errors = {}; this.error = ''; this.sig = '';
+      } catch (e) { App.toast(e.message, 'error'); }
+    },
+    async save() {
+      this.busy = true; this.errors = {}; this.error = '';
+      const body = { ...this.form, guardians: this.form.guardians.filter((g) => g.name.trim()) };
+      try {
+        if (this.form.id) {
+          await App.api('PUT', `/api/students/${this.form.id}`, body);
+          App.toast('Estudiante actualizado');
+          await this.open(this.form.id);
+        } else {
+          let r;
+          try { r = await App.api('POST', '/api/students', body); }
+          catch (e) {
+            if (e.status === 409 && confirm(`${e.message}. ¿Crear de todos modos?`)) r = await App.api('POST', '/api/students', { ...body, allow_duplicate: true });
+            else throw e;
+          }
+          App.toast('Estudiante creado');
+          await this.open(r.id);
+        }
+        this.load();
+      } catch (e) { this.errors = e.details || {}; this.error = e.message; }
+      finally { this.busy = false; }
+    },
+    async remove() {
+      if (!confirm(`¿Borrar a ${this.form.first_name} ${this.form.last_name}? Esta acción no se puede deshacer.`)) return;
+      try { await App.api('DELETE', `/api/students/${this.form.id}`); App.toast('Estudiante borrado'); this.form = null; this.load(); }
+      catch (e) { this.error = e.message; }
+    },
+    async enroll() {
+      try {
+        await App.api('POST', '/api/enrollments', { student_id: this.form.id, course_id: this.enrollCourse });
+        this.enrollCourse = ''; App.toast('Matriculado'); await this.open(this.form.id); this.tab = 'cursos'; this.load();
+      } catch (e) { App.toast(e.message, 'error'); }
+    },
+    async setEnrollment(e, status) {
+      try { await App.api('PUT', `/api/enrollments/${e.id}`, { status }); await this.open(this.form.id); this.tab = 'cursos'; this.load(); }
+      catch (err) { App.toast(err.message, 'error'); }
+    },
+    async viewSig(h) {
+      try {
+        this.sig = (await App.api('GET', `/api/attendance/${h.attendance_id}/signature`)).signature;
+        this.sigLabel = `Firma del ${h.signed_by} · ${App.fmtDate(h.date)} · ${h.course_name}`;
+      } catch (e) { App.toast(e.message, 'error'); }
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>
