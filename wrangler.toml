@@ -1,6 +1,12 @@
 name = "escuela-demo"
+main = "src/worker.js"
 compatibility_date = "2025-09-01"
-pages_build_output_dir = "public"
+
+# Archivos de la app (HTML, CSS, JS). El Worker corre primero para proteger las páginas.
+[assets]
+directory = "public"
+binding = "ASSETS"
+run_worker_first = true
 
 [[d1_databases]]
 binding = "DB"

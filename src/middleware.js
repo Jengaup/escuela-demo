@@ -1,4 +1,4 @@
-import { getSessionUser } from '../src/auth.js';
+import { getSessionUser } from './auth.js';
 
 const CSP = [
   "default-src 'self'",
@@ -26,8 +26,8 @@ function withSecurityHeaders(res) {
   return r;
 }
 
-export async function onRequest(context) {
-  const { request, env, next } = context;
+// Corre antes de todo: CSRF por origen, protección de páginas y headers de seguridad.
+export async function middleware(request, env, next) {
   const url = new URL(request.url);
   const path = url.pathname;
 

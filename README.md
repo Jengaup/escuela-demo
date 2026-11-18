@@ -2,7 +2,7 @@
 
 App web para una escuela de Modelaje, Costura y Cocina (niveles Básico, Intermedio y Avanzado). Reemplaza el Excel con un sistema de check-in, cobros, matrículas y reportes. Está diseñada primero para tablet y teléfono, con la interfaz en español de Puerto Rico.
 
-Corre completa en el plan gratis de Cloudflare: **Pages** (frontend), **Pages Functions** (API) y **D1** (base de datos SQLite).
+Corre completa en el plan gratis de Cloudflare: un **Worker** con archivos estáticos (pantallas y API) y **D1** (base de datos SQLite).
 
 ## Usuarios demo
 
@@ -71,12 +71,11 @@ Hay que usar el mismo tipo de lector para asignar las chapitas y para el check-i
 
 ```
 escuela-demo/
-├── wrangler.toml              # Configuración de Pages + binding D1 "DB"
+├── wrangler.toml              # Configuración del Worker, archivos de public/ y binding D1 "DB"
 ├── migrations/0001_init.sql   # Esquema completo
-├── functions/
-│   ├── _middleware.js         # Headers de seguridad, Origin y protección de páginas
-│   └── api/[[path]].js        # Punto de entrada de la API
 ├── src/
+│   ├── worker.js              # Punto de entrada: /api/* va a la API, lo demás a public/
+│   ├── middleware.js          # Headers de seguridad, Origin y protección de páginas
 │   ├── api.js router.js http.js validate.js crypto.js auth.js audit.js time.js
 │   ├── ledger.js              # Cuenta del estudiante: cargos, pagos y saldo a favor
 │   ├── seed.js                # Datos demo (se usa desde Node y desde el botón de reset)
@@ -143,7 +142,7 @@ npm run test:ui
 1. **Base de datos:** en el dashboard de Cloudflare ve a **Storage & Databases → D1 SQL Database → Create Database**, con el nombre `escuela-demo`. Copia el **Database ID**.
 2. **Tablas y usuarios:** abre la pestaña **Console** de la base. Pega todo el contenido de [`setup/consola-d1.sql`](setup/consola-d1.sql) y presiona **Execute**. Ese archivo crea las tablas y los 3 usuarios demo. Se regenera con `npm run console-sql` si cambian las migraciones.
 3. **ID en la configuración:** en GitHub edita `wrangler.toml` y pon tu ID en `database_id`.
-4. **Pages:** ve a **Workers & Pages → Create → Pages → Connect to Git** y escoge este repositorio. Usa como rama de producción la rama del código, framework `None`, sin build command y con output directory `public`. Presiona **Save and Deploy**.
+4. **Worker:** ve a **Workers & Pages → Create application → Continue with GitHub**, escoge este repositorio y deja el **Deploy command** en `npx wrangler deploy`. Presiona **Deploy**. Cloudflare publica la rama `main` y vuelve a publicar sola cada vez que cambia.
 5. **Datos demo:** entra con `admin` y presiona **Resetear datos demo** en Inicio.
 
 Cada cambio que se suba a la rama se publica solo.
@@ -184,28 +183,22 @@ Para producción, sin datos demo, crea solo tu admin:
 npm run user:create -- tuusuario "Tu Nombre" admin "UnaClaveLarga2026" --remote
 ```
 
-### 5. Crea el proyecto de Pages y publica
-
-```bash
-npx wrangler pages project create escuela-demo --production-branch main
-```
+### 5. Publica el Worker
 
 ```bash
 npm run deploy
 ```
 
-Wrangler lee `wrangler.toml` y conecta la base D1 (`DB`) y la variable `DEMO_MODE` al proyecto. Al terminar te da un URL `https://escuela-demo.pages.dev`.
+Wrangler lee `wrangler.toml` y conecta la base D1 (`DB`), los archivos de `public/` y la variable `DEMO_MODE`. Al terminar te da un URL `https://escuela-demo.<tu-cuenta>.workers.dev`.
 
 Para publicar cambios después, solo corre `npm run deploy` otra vez. Si cambias el esquema, crea una migración nueva en `migrations/` y corre `npm run db:migrate:remote`.
 
 ### 6. Conecta tu dominio
 
-1. En el dashboard de Cloudflare ve a **Workers & Pages → escuela-demo → Custom domains → Set up a custom domain**.
+1. En el dashboard de Cloudflare ve a **Workers & Pages → escuela-demo → Settings → Domains & Routes → Add → Custom domain**.
 2. Escribe el dominio, por ejemplo `app.tuescuela.com`.
-3. Si el dominio ya está en Cloudflare, el registro DNS se crea solo. Si el DNS está en otro proveedor, crea un **CNAME** de `app` hacia `escuela-demo.pages.dev`.
-4. Espera a que el estado diga **Active**. El certificado SSL es automático.
-
-Para usar el dominio raíz (`tuescuela.com` sin `app.`), el dominio tiene que estar administrado en Cloudflare, porque un CNAME en la raíz no funciona en la mayoría de los proveedores.
+3. El dominio tiene que estar administrado en Cloudflare (sus DNS apuntando a Cloudflare). El registro DNS y el certificado SSL se crean solos.
+4. Espera a que el estado diga **Active**.
 
 ### Antes de usarlo con datos reales
 
@@ -224,11 +217,11 @@ D1 también tiene **Time Travel**, que permite restaurar la base a cualquier mom
 - **Consultas por solicitud**: el plan gratis permite unas 50 consultas a D1 por solicitud. La app está hecha para quedarse por debajo: el reset del demo va en 3 pasos y la importación se envía en grupos de 40 estudiantes.
 
 - **D1**: 5 GB de almacenamiento, 5 millones de lecturas y 100,000 escrituras al día. Cada foto ocupa unos 30 a 50 KB, así que caben miles de estudiantes con foto.
-- **Workers/Pages Functions**: 100,000 solicitudes al día y 10 ms de CPU por solicitud. El login usa PBKDF2 con 100,000 iteraciones, que está cerca de ese límite. Cloudflare suele permitir picos ocasionales, pero si alguna vez ves el error 1102 al entrar, tienes dos opciones: el plan Workers Paid ($5 al mes, 30 segundos de CPU) o bajar las iteraciones en `src/crypto.js`. Cada usuario guarda sus propias iteraciones, así que los hashes viejos siguen funcionando.
+- **Workers**: 100,000 solicitudes al día y 10 ms de CPU por solicitud. El login usa PBKDF2 con 100,000 iteraciones, que está cerca de ese límite. Cloudflare suele permitir picos ocasionales, pero si alguna vez ves el error 1102 al entrar, tienes dos opciones: el plan Workers Paid ($5 al mes, 30 segundos de CPU) o bajar las iteraciones en `src/crypto.js`. Cada usuario guarda sus propias iteraciones, así que los hashes viejos siguen funcionando.
 
 ## Tecnología
 
 - HTML + [Tailwind CSS v4](https://tailwindcss.com) (CDN) + [Alpine.js](https://alpinejs.dev) (CDN). No hay paso de build.
 - [SheetJS](https://sheetjs.com) para leer y exportar Excel, cargado desde CDN solo en Importar y Reportes.
 - Chapitas NFC con Web NFC (Android) o con lector USB tipo teclado (`public/assets/nfc.js`).
-- API en JavaScript sobre Pages Functions con un router pequeño propio, sin dependencias de runtime.
+- API en JavaScript sobre Cloudflare Workers con un router pequeño propio, sin dependencias de runtime.
