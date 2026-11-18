@@ -41,7 +41,7 @@
     <section class="grid gap-3 grid-cols-2 lg:grid-cols-4">
       <div class="card p-4"><div class="text-sm text-stone-500">Asistencias</div><div class="text-2xl font-semibold" x-text="r.attendance.length"></div></div>
       <div class="card p-4"><div class="text-sm text-stone-500">Cobrado</div><div class="text-2xl font-semibold text-accent" x-text="App.money(sum(r.payments))"></div></div>
-      <div class="card p-4"><div class="text-sm text-stone-500">Sin pagar</div><div class="text-2xl font-semibold" x-text="r.attendance.filter(a => !a.method).length"></div></div>
+      <div class="card p-4"><div class="text-sm text-stone-500">Pendiente de cobro</div><div class="text-2xl font-semibold text-red-700" x-text="App.money(r.summary.reduce((t, s) => t + s.due_cents, 0))"></div></div>
       <div class="card p-4"><div class="text-sm text-stone-500">Clases dadas</div><div class="text-2xl font-semibold" x-text="r.summary.reduce((t, s) => t + s.sessions, 0)"></div></div>
     </section>
   </template>
@@ -49,37 +49,38 @@
   <div class="flex gap-1 border-b border-stone-200 overflow-x-auto scrollbar-none">
     <template x-for="t in tabs.filter(t => !t.admin || isAdmin)" :key="t.key">
       <button type="button" class="px-4 py-3 font-medium border-b-2 whitespace-nowrap" :class="tab === t.key ? 'border-accent text-accent' : 'border-transparent text-stone-500'"
-        @click="tab = t.key; if (t.key === 'audit') loadAudit()" x-text="t.label"></button>
+        @click="tab = t.key; if (t.key === 'audit') loadAudit(); if (t.key === 'debts') loadDebts()" x-text="t.label"></button>
     </template>
   </div>
 
   <div class="card overflow-x-auto" x-show="tab === 'summary'">
     <table class="table">
-      <thead><tr><th>Curso</th><th class="text-right">Clases</th><th class="text-right">Asistencias</th><th class="text-right">Pagadas</th>
-        <th class="text-right">Efectivo</th><th class="text-right">ATH Móvil</th><th class="text-right">Tarjeta</th><th class="text-right">Total</th></tr></thead>
+      <thead><tr><th>Curso</th><th class="text-right">Clases</th><th class="text-right">Asistencias</th><th class="text-right">Clases ($)</th>
+        <th class="text-right">Exámenes y matrículas</th><th class="text-right">Total facturado</th><th class="text-right">Cobrado</th><th class="text-right">Pendiente</th></tr></thead>
       <tbody>
         <template x-for="s in r?.summary || []" :key="s.id">
           <tr><td x-text="s.course_name"></td><td class="text-right" x-text="s.sessions"></td><td class="text-right" x-text="s.attendances"></td>
-            <td class="text-right" x-text="s.paid_count"></td><td class="text-right" x-text="App.money(s.efectivo)"></td>
-            <td class="text-right" x-text="App.money(s.ath_movil)"></td><td class="text-right" x-text="App.money(s.tarjeta)"></td>
-            <td class="text-right font-semibold" x-text="App.money(s.collected)"></td></tr>
+            <td class="text-right" x-text="App.money(s.classes_cents)"></td><td class="text-right" x-text="App.money(s.other_cents)"></td>
+            <td class="text-right" x-text="App.money(s.billed_cents)"></td><td class="text-right font-semibold" x-text="App.money(s.collected_cents)"></td>
+            <td class="text-right" :class="s.due_cents && 'text-red-700 font-semibold'" x-text="App.money(s.due_cents)"></td></tr>
         </template>
       </tbody>
     </table>
     <p class="p-4 text-stone-500" x-show="r && !r.summary.length">Sin clases en este rango.</p>
+    <p class="px-4 pb-4 text-sm text-stone-500">Los pagos por adelantado que todavía no se han usado no aparecen aquí; se ven en la pestaña Pagos y en Deudas (saldo a favor).</p>
   </div>
 
   <div class="card overflow-x-auto" x-show="tab === 'attendance'">
     <table class="table">
-      <thead><tr><th>Fecha</th><th>Curso</th><th>Estudiante</th><th>Entrada</th><th>Pago</th><th>Cobró</th><th>Banda</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Curso</th><th>Estudiante</th><th>Entrada</th><th>Clase</th><th>Banda</th></tr></thead>
       <tbody>
         <template x-for="(a, i) in (r?.attendance || []).slice(0, limit)" :key="i">
           <tr><td class="whitespace-nowrap" x-text="App.fmtDate(a.date)"></td><td x-text="a.course_name"></td>
             <td><a class="text-accent" :href="`/estudiantes?id=${a.student_id}`" x-text="a.student"></a></td>
             <td x-text="a.check_in_method === 'nfc' ? 'Chapita' : 'Manual'"></td>
-            <td class="whitespace-nowrap"><span x-show="a.method" x-text="`${App.money(a.amount_cents)} · ${App.METHOD_LABEL[a.method]}`"></span>
-              <span x-show="!a.method" class="pill bg-amber-100 text-amber-800">Pendiente</span></td>
-            <td x-text="a.received_by || ''"></td><td x-text="a.band ? a.band_code : '—'"></td></tr>
+            <td class="whitespace-nowrap"><span x-show="a.amount_cents && !a.due_cents" x-text="`Pagada ${App.money(a.amount_cents)}`"></span>
+              <span x-show="a.due_cents" class="pill bg-red-100 text-red-800" x-text="`Debe ${App.money(a.due_cents)}`"></span></td>
+            <td x-text="a.band ? a.band_code : '—'"></td></tr>
         </template>
       </tbody>
     </table>
@@ -88,15 +89,36 @@
 
   <div class="card overflow-x-auto" x-show="tab === 'payments'">
     <table class="table">
-      <thead><tr><th>Fecha cobro</th><th>Estudiante</th><th>Curso</th><th>Método</th><th>Cobró</th><th class="text-right">Monto</th></tr></thead>
+      <thead><tr><th>Fecha cobro</th><th>Estudiante</th><th>Concepto</th><th>Método</th><th>Cobró</th><th class="text-right">Monto</th></tr></thead>
       <tbody>
         <template x-for="(p, i) in (r?.payments || []).slice(0, limit)" :key="i">
-          <tr><td class="whitespace-nowrap" x-text="App.fmtDateTime(p.created_at)"></td><td x-text="p.student"></td><td x-text="p.course_name"></td>
+          <tr><td class="whitespace-nowrap" x-text="App.fmtDateTime(p.created_at)"></td><td x-text="p.student"></td><td class="text-sm" x-text="p.concept"></td>
             <td x-text="App.METHOD_LABEL[p.method]"></td><td x-text="p.received_by"></td><td class="text-right" x-text="App.money(p.amount_cents)"></td></tr>
         </template>
       </tbody>
     </table>
     <button type="button" class="btn btn-ghost w-full" x-show="(r?.payments.length || 0) > limit" @click="limit += 200">Ver más</button>
+  </div>
+
+  <div class="card overflow-x-auto" x-show="tab === 'debts'">
+    <div class="px-4 pt-4 flex flex-wrap gap-4 text-sm">
+      <span>Total por cobrar: <strong class="text-red-700" x-text="App.money(debts.reduce((t, d) => t + d.due_cents, 0))"></strong></span>
+      <span>Saldo a favor total: <strong class="text-emerald-700" x-text="App.money(debts.reduce((t, d) => t + d.credit_cents, 0))"></strong></span>
+    </div>
+    <table class="table">
+      <thead><tr><th>Estudiante</th><th>Encargado</th><th>Teléfono</th><th class="text-right">Debe</th><th class="text-right">A favor</th><th>Desde</th><th>Detalle</th></tr></thead>
+      <tbody>
+        <template x-for="d in debts" :key="d.id">
+          <tr><td><a class="text-accent" :href="`/estudiantes?id=${d.id}`" x-text="d.student"></a></td><td x-text="d.guardian_name || ''"></td>
+            <td class="whitespace-nowrap" x-text="d.phone || ''"></td>
+            <td class="text-right font-semibold" :class="d.due_cents && 'text-red-700'" x-text="App.money(d.due_cents)"></td>
+            <td class="text-right" :class="d.credit_cents && 'text-emerald-700'" x-text="App.money(d.credit_cents)"></td>
+            <td class="whitespace-nowrap" x-text="d.oldest ? App.fmtDate(d.oldest) : ''"></td>
+            <td class="text-xs text-stone-600 max-w-sm" x-text="d.items || ''"></td></tr>
+        </template>
+      </tbody>
+    </table>
+    <p class="p-4 text-stone-500" x-show="!debts.length">Nadie debe dinero.</p>
   </div>
 
   <div class="card overflow-x-auto" x-show="tab === 'audit'">
@@ -119,8 +141,8 @@ function reports() {
   const monthStart = (d) => d.slice(0, 8) + '01';
   const prevMonthEnd = App.addDays(monthStart(t), -1);
   return {
-    from: App.addDays(t, -13), to: t, courseId: '', courses: [], r: null, busy: false, tab: 'summary', limit: 200, audit: [], isAdmin: false,
-    tabs: [{ key: 'summary', label: 'Resumen por curso' }, { key: 'attendance', label: 'Asistencia' }, { key: 'payments', label: 'Pagos' }, { key: 'audit', label: 'Auditoría', admin: true }],
+    from: App.addDays(t, -13), to: t, courseId: '', courses: [], r: null, busy: false, tab: 'summary', limit: 200, audit: [], debts: [], isAdmin: false,
+    tabs: [{ key: 'summary', label: 'Resumen por curso' }, { key: 'attendance', label: 'Asistencia' }, { key: 'payments', label: 'Pagos' }, { key: 'debts', label: 'Deudas' }, { key: 'audit', label: 'Auditoría', admin: true }],
     presets: [
       { label: 'Hoy', from: t, to: t },
       { label: 'Últimos 7 días', from: App.addDays(t, -6), to: t },
@@ -142,30 +164,35 @@ function reports() {
       try { this.r = await App.api('GET', `/api/reports/range?${q}`); } catch (e) { App.toast(e.message, 'error'); }
       finally { this.busy = false; }
     },
+    async loadDebts() {
+      try { this.debts = (await App.api('GET', '/api/reports/debts')).students; } catch (e) { App.toast(e.message, 'error'); }
+    },
     async loadAudit() {
       try { this.audit = (await App.api('GET', '/api/audit?limit=300')).entries; } catch (e) { App.toast(e.message, 'error'); }
     },
     rows() {
       const $ = (c) => (c == null ? '' : (c / 100).toFixed(2));
       return {
-        Resumen: this.r.summary.map((s) => ({ Curso: s.course_name, Clases: s.sessions, Asistencias: s.attendances, Pagadas: s.paid_count,
-          Efectivo: $(s.efectivo), 'ATH Móvil': $(s.ath_movil), Tarjeta: $(s.tarjeta), Total: $(s.collected) })),
+        Resumen: this.r.summary.map((s) => ({ Curso: s.course_name, Clases: s.sessions, Asistencias: s.attendances,
+          'Clases ($)': $(s.classes_cents), 'Exámenes y matrículas': $(s.other_cents), Facturado: $(s.billed_cents), Cobrado: $(s.collected_cents), Pendiente: $(s.due_cents) })),
         Asistencia: this.r.attendance.map((a) => ({ Fecha: a.date, Curso: a.course_name, Estudiante: a.student,
-          Entrada: a.check_in_method === 'nfc' ? 'Chapita' : 'Manual', 'Monto': $(a.amount_cents), 'Método': a.method ? App.METHOD_LABEL[a.method] : 'Pendiente', 'Cobró': a.received_by || '', Banda: a.band ? a.band_code : '' })),
-        Pagos: this.r.payments.map((p) => ({ 'Fecha cobro': p.local_date, Hora: App.fmtDateTime(p.created_at), Estudiante: p.student, Curso: p.course_name,
-          'Fecha clase': p.class_date, 'Método': App.METHOD_LABEL[p.method], 'Cobró': p.received_by, Monto: $(p.amount_cents) })),
+          Entrada: a.check_in_method === 'nfc' ? 'Chapita' : 'Manual', Precio: $(a.amount_cents), Debe: $(a.due_cents), Banda: a.band ? a.band_code : '' })),
+        Pagos: this.r.payments.map((p) => ({ 'Fecha cobro': p.local_date, Hora: App.fmtDateTime(p.created_at), Estudiante: p.student, Concepto: p.concept,
+          'Método': App.METHOD_LABEL[p.method], 'Cobró': p.received_by, Monto: $(p.amount_cents) })),
+        Deudas: this.debts.map((d) => ({ Estudiante: d.student, Encargado: d.guardian_name || '', 'Teléfono': d.phone || '', Debe: $(d.due_cents), 'A favor': $(d.credit_cents), Desde: d.oldest || '', Detalle: d.items || '' })),
       };
     },
     exportCsv() {
       const name = `${this.from}_a_${this.to}`;
       if (this.tab === 'audit') return App.downloadCsv(`auditoria_${App.todayPR()}.csv`, this.audit.map((e) => ({ Fecha: e.created_at, Usuario: e.username, Accion: e.action, Detalle: e.details, IP: e.ip })));
-      const map = { summary: 'Resumen', attendance: 'Asistencia', payments: 'Pagos' };
+      const map = { summary: 'Resumen', attendance: 'Asistencia', payments: 'Pagos', debts: 'Deudas' };
       App.downloadCsv(`${map[this.tab].toLowerCase()}_${name}.csv`, this.rows()[map[this.tab]]);
     },
-    exportXlsx() {
+    async exportXlsx() {
+      if (!this.debts.length) await this.loadDebts();
       const sheets = this.rows();
       // Números como números en Excel
-      for (const rows of Object.values(sheets)) for (const row of rows) for (const k of ['Efectivo', 'ATH Móvil', 'Tarjeta', 'Total', 'Monto']) if (row[k] !== undefined && row[k] !== '') row[k] = Number(row[k]);
+      for (const rows of Object.values(sheets)) for (const row of rows) for (const k of ['Clases ($)', 'Exámenes y matrículas', 'Facturado', 'Cobrado', 'Pendiente', 'Precio', 'Debe', 'A favor', 'Monto']) if (row[k] !== undefined && row[k] !== '') row[k] = Number(row[k]);
       App.downloadXlsx(`reporte_${this.from}_a_${this.to}.xlsx`, sheets);
     },
   };

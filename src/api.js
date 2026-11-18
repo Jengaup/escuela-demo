@@ -10,10 +10,11 @@ import * as dashboard from './routes/dashboard.js';
 import * as reports from './routes/reports.js';
 import * as importer from './routes/import.js';
 import * as admin from './routes/admin.js';
+import * as account from './routes/account.js';
 
 const router = new Router();
 // importer antes que students para que /api/students/import no choque con /api/students/:id
-for (const mod of [auth, users, checkin, importer, students, courses, dashboard, reports, admin]) mod.register(router);
+for (const mod of [auth, users, checkin, importer, students, courses, dashboard, reports, admin, account]) mod.register(router);
 
 export async function handleApi(request, env) {
   const url = new URL(request.url);

@@ -1,4 +1,4 @@
--- Esquema inicial. Dinero en centavos (INTEGER). Fechas locales 'YYYY-MM-DD' (America/Puerto_Rico).
+-- Esquema. Dinero en centavos (INTEGER). Fechas locales 'YYYY-MM-DD' (America/Puerto_Rico).
 -- Timestamps en ISO-8601 UTC.
 PRAGMA foreign_keys = ON;
 
@@ -49,11 +49,20 @@ CREATE TABLE students (
   phone         TEXT,
   email         TEXT,
   notes         TEXT,
+  nfc_uid       TEXT,                 -- número único de la chapita NFC
   active        INTEGER NOT NULL DEFAULT 1,
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX idx_students_name ON students(last_name, first_name);
+CREATE UNIQUE INDEX idx_students_nfc ON students(nfc_uid) WHERE nfc_uid IS NOT NULL;
+
+-- Fotos aparte para que las listas no carguen imágenes.
+CREATE TABLE student_photos (
+  student_id INTEGER PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
+  photo      TEXT NOT NULL,             -- data:image/jpeg;base64,...
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
 
 CREATE TABLE guardians (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,7 +81,9 @@ CREATE TABLE courses (
   days        TEXT NOT NULL,            -- días de semana "1,3" (0=domingo … 6=sábado)
   start_time  TEXT NOT NULL,            -- "HH:MM"
   end_time    TEXT NOT NULL,
-  price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
+  price_cents INTEGER NOT NULL CHECK (price_cents >= 0),               -- precio por clase
+  exam_fee_cents       INTEGER NOT NULL DEFAULT 0 CHECK (exam_fee_cents >= 0),
+  enrollment_fee_cents INTEGER NOT NULL DEFAULT 0 CHECK (enrollment_fee_cents >= 0),  -- matrícula
   instructor  TEXT NOT NULL,
   active      INTEGER NOT NULL DEFAULT 1,
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
@@ -97,28 +108,62 @@ CREATE TABLE class_sessions (
 CREATE INDEX idx_sessions_date ON class_sessions(date);
 
 CREATE TABLE attendance (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id  INTEGER NOT NULL REFERENCES class_sessions(id) ON DELETE CASCADE,
-  student_id  INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-  signature   TEXT,                     -- data:image/png;base64,...
-  signed_by   TEXT CHECK (signed_by IN ('encargado','estudiante')),
-  signed_at   TEXT,
-  recorded_by INTEGER REFERENCES users(id),
-  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id      INTEGER NOT NULL REFERENCES class_sessions(id) ON DELETE CASCADE,
+  student_id      INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  check_in_method TEXT NOT NULL DEFAULT 'manual' CHECK (check_in_method IN ('nfc','manual')),
+  recorded_by     INTEGER REFERENCES users(id),
+  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   UNIQUE (session_id, student_id)
 );
 CREATE INDEX idx_attendance_student ON attendance(student_id);
 
-CREATE TABLE payments (
+-- Cuenta del estudiante: cargos (lo que debe) y pagos (lo que entrega).
+-- Cada pago se reparte entre cargos (payment_allocations). Lo que sobra de un pago es saldo a favor.
+CREATE TABLE charges (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  attendance_id INTEGER NOT NULL UNIQUE REFERENCES attendance(id) ON DELETE CASCADE,
-  amount_cents  INTEGER NOT NULL CHECK (amount_cents >= 0),
-  method        TEXT NOT NULL CHECK (method IN ('efectivo','ath_movil','tarjeta')),
-  received_by   INTEGER NOT NULL REFERENCES users(id),
-  local_date    TEXT NOT NULL,          -- fecha local del cobro (para cuadre)
+  student_id    INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  kind          TEXT NOT NULL CHECK (kind IN ('clase','examen','matricula','otro')),
+  description   TEXT NOT NULL,
+  amount_cents  INTEGER NOT NULL CHECK (amount_cents > 0),
+  attendance_id INTEGER UNIQUE REFERENCES attendance(id) ON DELETE CASCADE,  -- solo para kind = 'clase'
+  course_id     INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+  local_date    TEXT NOT NULL,
+  created_by    INTEGER REFERENCES users(id),
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+CREATE INDEX idx_charges_student ON charges(student_id, created_at);
+
+CREATE TABLE payments (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id   INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+  method       TEXT NOT NULL CHECK (method IN ('efectivo','ath_movil','tarjeta')),
+  received_by  INTEGER NOT NULL REFERENCES users(id),
+  local_date   TEXT NOT NULL,           -- fecha local del cobro (para el cuadre)
+  note         TEXT,
+  client_ref   TEXT UNIQUE,             -- evita cobros dobles si se toca el botón dos veces
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
 CREATE INDEX idx_payments_date ON payments(local_date);
+CREATE INDEX idx_payments_student ON payments(student_id, created_at);
+
+CREATE TABLE payment_allocations (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  payment_id   INTEGER NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  charge_id    INTEGER NOT NULL REFERENCES charges(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0)
+);
+CREATE INDEX idx_alloc_payment ON payment_allocations(payment_id);
+CREATE INDEX idx_alloc_charge ON payment_allocations(charge_id);
+
+-- Cuánto falta por pagar de cada cargo y cuánto queda libre de cada pago.
+CREATE VIEW charge_status AS
+  SELECT c.*, c.amount_cents - IFNULL((SELECT SUM(pa.amount_cents) FROM payment_allocations pa WHERE pa.charge_id = c.id), 0) AS due_cents
+    FROM charges c;
+CREATE VIEW payment_status AS
+  SELECT p.*, p.amount_cents - IFNULL((SELECT SUM(pa.amount_cents) FROM payment_allocations pa WHERE pa.payment_id = p.id), 0) AS free_cents
+    FROM payments p;
 
 CREATE TABLE wristbands (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

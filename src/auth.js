@@ -3,6 +3,7 @@ import { randomHex, sha256Hex } from './crypto.js';
 
 export const COOKIE_NAME = 'sid';
 export const SESSION_HOURS = 12;
+export const REMEMBER_HOURS = 30 * 24; // "Mantener abierta en esta tablet"
 
 export function parseCookies(header) {
   const out = {};
@@ -17,15 +18,15 @@ export function sessionCookie(token, maxAgeSec) {
   return `${COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSec}`;
 }
 
-export async function createSession(env, userId) {
+export async function createSession(env, userId, hours = SESSION_HOURS) {
   const token = randomHex(32);
   const tokenHash = await sha256Hex(token);
-  const expires = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
+  const expires = new Date(Date.now() + hours * 3600 * 1000).toISOString();
   await env.DB.batch([
     env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at < ?').bind(new Date().toISOString()),
     env.DB.prepare('INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES (?,?,?)').bind(tokenHash, userId, expires),
   ]);
-  return { token, cookie: sessionCookie(token, SESSION_HOURS * 3600) };
+  return { token, cookie: sessionCookie(token, hours * 3600) };
 }
 
 // Devuelve el usuario de la sesión o null. Token en cookie; en DB solo se guarda su hash.

@@ -1,7 +1,7 @@
 import { json, readJson, HttpError } from '../http.js';
 import { V } from '../validate.js';
 import { verifyPassword, hashPassword } from '../crypto.js';
-import { createSession, destroySession, isRateLimited, recordFailure, clearFailures, RL_MAX_USER, RL_MAX_IP } from '../auth.js';
+import { createSession, destroySession, isRateLimited, recordFailure, clearFailures, RL_MAX_USER, RL_MAX_IP, SESSION_HOURS, REMEMBER_HOURS } from '../auth.js';
 import { audit } from '../audit.js';
 
 // Hash ficticio para que un usuario inexistente tarde lo mismo que uno real (evita enumeración).
@@ -19,6 +19,7 @@ export function register(r) {
     const v = new V(await readJson(ctx.request, 4096));
     const username = v.str('username', { required: true, max: 50, label: 'Usuario' });
     const password = v.str('password', { required: true, max: 200, label: 'Contraseña' });
+    const remember = v.bool('remember');
     v.done();
 
     const keys = [`ip:${ctx.ip}`, `user:${username.toLowerCase()}`];
@@ -35,7 +36,7 @@ export function register(r) {
     }
 
     await clearFailures(ctx.env, [keys[1]]);
-    const { cookie } = await createSession(ctx.env, user.id);
+    const { cookie } = await createSession(ctx.env, user.id, remember ? REMEMBER_HOURS : SESSION_HOURS);
     await audit({ ...ctx, user }, 'login', 'user', user.id);
     return json({ user: { id: user.id, username: user.username, name: user.name, role: user.role } }, 200, { 'set-cookie': cookie });
   }, { public: true });

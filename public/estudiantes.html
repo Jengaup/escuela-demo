@@ -48,6 +48,7 @@
           <span x-text="s.last_visit ? App.fmtDate(s.last_visit) : '—'"></span>
           <span class="pill bg-stone-200 text-stone-600 ml-1" x-show="!s.active">Inactivo</span>
           <span class="pill bg-amber-100 text-amber-800 ml-1" x-show="s.active && !s.has_nfc">Sin chapita</span>
+          <span class="pill bg-red-100 text-red-800 ml-1" x-show="s.due_cents" x-text="`Debe ${App.money(s.due_cents)}`"></span>
         </div>
       </button>
     </template>
@@ -65,12 +66,14 @@
           <div class="flex items-start gap-3">
             <div>
               <h2 id="sTitle" class="text-xl font-semibold" x-text="form.id ? `${form.first_name} ${form.last_name}` : 'Nuevo estudiante'"></h2>
-              <p class="text-sm text-stone-500" x-show="detail" x-text="detail && `${detail.totals.classes} clases · ${App.money(detail.totals.paid_cents)} pagado${detail.totals.unpaid ? ' · ' + detail.totals.unpaid + ' sin pagar' : ''}`"></p>
+              <p class="text-sm text-stone-500" x-show="detail" x-text="detail && `${detail.totals.classes} clases`"></p>
+              <p class="text-sm font-semibold" x-show="detail?.totals.due_cents" x-cloak><span class="text-red-700" x-text="`Debe ${App.money(detail?.totals.due_cents)}`"></span></p>
+              <p class="text-sm font-semibold" x-show="detail?.totals.credit_cents" x-cloak><span class="text-emerald-700" x-text="`Saldo a favor ${App.money(detail?.totals.credit_cents)}`"></span></p>
             </div>
             <button type="button" class="ml-auto btn-ghost text-2xl leading-none" @click="form = null" aria-label="Cerrar">&times;</button>
           </div>
           <div class="flex gap-1 mt-3 overflow-x-auto scrollbar-none" x-show="form.id">
-            <template x-for="t in [['datos','Datos'],['cursos','Cursos'],['historial','Historial']]" :key="t[0]">
+            <template x-for="t in [['datos','Datos'],['cuenta','Cuenta'],['cursos','Cursos'],['historial','Asistencia']]" :key="t[0]">
               <button type="button" class="px-4 py-2.5 text-sm font-medium border-b-2" :class="tab === t[0] ? 'border-accent text-accent' : 'border-transparent text-stone-500'"
                 @click="tab = t[0]" x-text="t[1]"></button>
             </template>
@@ -200,6 +203,102 @@
           </div>
         </div>
 
+        <!-- Cuenta -->
+        <div class="p-5 space-y-4" x-show="tab === 'cuenta'">
+          <div class="grid grid-cols-2 gap-3">
+            <div class="card p-4"><div class="text-sm text-stone-500">Debe</div>
+              <div class="text-2xl font-semibold" :class="account.due_cents ? 'text-red-700' : 'text-stone-900'" x-text="App.money(account.due_cents)"></div></div>
+            <div class="card p-4"><div class="text-sm text-stone-500">Saldo a favor</div>
+              <div class="text-2xl font-semibold" :class="account.credit_cents ? 'text-emerald-700' : 'text-stone-900'" x-text="App.money(account.credit_cents)"></div></div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="btn btn-secondary" @click="acct = { mode: 'cargo', kind: 'examen', amount: '', description: '', course_id: account.courses[0]?.id || null, method: null }; prefillAcct()">+ Añadir cargo</button>
+            <button type="button" class="btn btn-primary" @click="acct = { mode: 'pago', amount: account.due_cents ? (account.due_cents / 100).toFixed(2) : '', method: null, note: '' }; acctRef = App.newRef()">Recibir pago</button>
+          </div>
+
+          <!-- Formulario de cargo / pago -->
+          <template x-if="acct">
+            <div class="card p-4 space-y-3 border-accent">
+              <template x-if="acct.mode === 'cargo'">
+                <div class="space-y-3">
+                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <template x-for="k in [['examen','Examen'],['matricula','Matrícula'],['clase','Clase adicional'],['otro','Otro']]" :key="k[0]">
+                      <button type="button" class="btn text-sm" :class="acct.kind === k[0] ? 'btn-primary' : 'btn-secondary'" @click="acct.kind = k[0]; prefillAcct()" x-text="k[1]"></button>
+                    </template>
+                  </div>
+                  <select class="input" x-model.number="acct.course_id" @change="prefillAcct()" x-show="acct.kind !== 'otro' && account.courses.length" aria-label="Curso">
+                    <template x-for="c in account.courses" :key="c.id"><option :value="c.id" x-text="c.name" :selected="c.id === acct.course_id"></option></template>
+                  </select>
+                  <input class="input" x-model="acct.description" maxlength="120" :placeholder="acct.kind === 'otro' ? '¿Qué se cobra? (requerido)' : 'Descripción (opcional)'" aria-label="Descripción">
+                </div>
+              </template>
+              <div class="flex items-center gap-2">
+                <label class="text-sm text-stone-600" for="acAmt">Monto $</label>
+                <input id="acAmt" class="input max-w-[9rem]" inputmode="decimal" x-model="acct.amount">
+                <span class="text-xs text-stone-500" x-show="acct.mode === 'pago'">Si es más de lo que debe, el resto queda a favor (pago adelantado).</span>
+              </div>
+              <div>
+                <span class="label" x-text="acct.mode === 'cargo' ? '¿Paga ahora?' : 'Método de pago'"></span>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <template x-for="m in ['efectivo','ath_movil','tarjeta']" :key="m">
+                    <button type="button" class="btn text-sm" :class="acct.method === m ? 'btn-primary' : 'btn-secondary'" @click="acct.method = m" x-text="App.METHOD_LABEL[m]"></button>
+                  </template>
+                  <button type="button" class="btn text-sm" x-show="acct.mode === 'cargo'" :class="acct.method === 'despues' ? 'bg-amber-500 text-white' : 'btn-secondary'"
+                    @click="acct.method = 'despues'">Paga después</button>
+                </div>
+              </div>
+              <div class="flex gap-2 justify-end">
+                <button type="button" class="btn btn-ghost" @click="acct = null">Cancelar</button>
+                <button type="button" class="btn btn-primary" :disabled="acctBusy || !acct.method || !(parseFloat(acct.amount) > 0) || (acct.kind === 'otro' && acct.mode === 'cargo' && !acct.description.trim())"
+                  @click="saveAcct()">Guardar</button>
+              </div>
+            </div>
+          </template>
+
+          <div>
+            <h3 class="font-semibold mb-2">Cargos</h3>
+            <div class="overflow-x-auto border border-stone-200 rounded-xl">
+              <table class="table">
+                <thead><tr><th>Fecha</th><th>Concepto</th><th class="text-right">Monto</th><th>Estado</th><th x-show="isAdmin"></th></tr></thead>
+                <tbody>
+                  <template x-for="c in account.charges" :key="c.id">
+                    <tr>
+                      <td class="whitespace-nowrap" x-text="App.fmtDate(c.local_date)"></td>
+                      <td x-text="c.description"></td>
+                      <td class="text-right" x-text="App.money(c.amount_cents)"></td>
+                      <td><span class="pill" :class="c.due_cents ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'"
+                        x-text="c.due_cents ? (c.due_cents < c.amount_cents ? `Debe ${App.money(c.due_cents)}` : 'Pendiente') : 'Pagado'"></span></td>
+                      <td x-show="isAdmin"><button type="button" class="text-xs text-red-700 underline" @click="voidCharge(c)">Anular</button></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <p class="p-3 text-stone-500" x-show="!account.charges.length">Sin cargos.</p>
+            </div>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">Pagos</h3>
+            <div class="overflow-x-auto border border-stone-200 rounded-xl">
+              <table class="table">
+                <thead><tr><th>Fecha</th><th class="text-right">Monto</th><th>Método</th><th>Aplicado a</th><th>Cobró</th><th x-show="isAdmin"></th></tr></thead>
+                <tbody>
+                  <template x-for="p in account.payments" :key="p.id">
+                    <tr>
+                      <td class="whitespace-nowrap" x-text="App.fmtDateTime(p.created_at)"></td>
+                      <td class="text-right" x-text="App.money(p.amount_cents)"></td>
+                      <td x-text="App.METHOD_LABEL[p.method]"></td>
+                      <td class="text-sm text-stone-600" x-text="(p.applied_to || '') + (p.free_cents ? ` (a favor ${App.money(p.free_cents)})` : '')"></td>
+                      <td x-text="p.received_by"></td>
+                      <td x-show="isAdmin"><button type="button" class="text-xs text-red-700 underline" @click="voidPayment(p)">Anular</button></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <p class="p-3 text-stone-500" x-show="!account.payments.length">Sin pagos.</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Historial -->
         <div class="p-5" x-show="tab === 'historial'">
           <div class="overflow-x-auto">
@@ -212,8 +311,8 @@
                     <td x-text="h.course_name"></td>
                     <td x-text="h.check_in_method === 'nfc' ? 'Chapita' : 'Manual'"></td>
                     <td class="whitespace-nowrap">
-                      <span x-show="h.method" x-text="`${App.money(h.amount_cents)} · ${App.METHOD_LABEL[h.method]}`"></span>
-                      <span x-show="!h.method" class="pill bg-amber-100 text-amber-800">Pendiente</span>
+                      <span x-show="h.amount_cents && !h.due_cents" x-text="`Pagada ${App.money(h.amount_cents)}`"></span>
+                      <span x-show="h.due_cents" class="pill bg-red-100 text-red-800" x-text="`Debe ${App.money(h.due_cents)}`"></span>
                     </td>
                     <td x-text="h.band_delivered ? '✓' : '—'"></td>
                   </tr>
@@ -233,7 +332,7 @@ function students() {
   const blank = () => ({ id: null, first_name: '', last_name: '', birth_date: '', guardian_name: '', phone: '', email: '', notes: '', active: true, guardians: [], course_ids: [] });
   return {
     list: [], loaded: false, q: '', status: 'activo', courseFilter: '', courses: [], isAdmin: false,
-    form: null, detail: null, tab: 'datos', errors: {}, error: '', busy: false, enrollCourse: '', photo: '', photoBusy: false, assigning: false, nfcSupported: NfcInput.webNfcSupported, nfcOn: false,
+    form: null, detail: null, tab: 'datos', errors: {}, error: '', busy: false, enrollCourse: '', account: { due_cents: 0, credit_cents: 0, charges: [], payments: [], courses: [] }, acct: null, acctRef: '', acctBusy: false, photo: '', photoBusy: false, assigning: false, nfcSupported: NfcInput.webNfcSupported, nfcOn: false,
     async init() {
       App.me().then((r) => (this.isAdmin = r.user.role === 'admin'));
       NfcInput.on((uid) => this.onTag(uid));
@@ -259,6 +358,8 @@ function students() {
         for (const k of ['guardian_name', 'phone', 'email', 'notes']) this.form[k] ||= '';
         this.tab = 'datos'; this.errors = {}; this.error = ''; this.assigning = false;
         this.photo = '';
+        this.acct = null;
+        this.loadAccount();
         if (d.student.has_photo) App.api('GET', `/api/students/${id}/photo`).then((r) => { if (this.form?.id === id) this.photo = r.photo; }).catch(() => {});
       } catch (e) { App.toast(e.message, 'error'); }
     },
@@ -350,6 +451,48 @@ function students() {
         App.toast('Foto guardada');
       } catch (e) { App.toast(e.message, 'error'); }
       finally { this.photoBusy = false; }
+    },
+    // ----- Cuenta -----
+    async loadAccount() {
+      if (!this.form?.id) return;
+      try { this.account = await App.api('GET', `/api/students/${this.form.id}/account`); } catch (e) { App.toast(e.message, 'error'); }
+    },
+    prefillAcct() {
+      const c = this.account.courses.find((x) => x.id === this.acct.course_id);
+      const v = { examen: c?.exam_fee_cents, matricula: c?.enrollment_fee_cents, clase: c?.price_cents }[this.acct.kind];
+      this.acct.amount = v ? (v / 100).toFixed(2) : '';
+    },
+    async saveAcct() {
+      this.acctBusy = true;
+      const a = this.acct;
+      try {
+        if (a.mode === 'cargo') {
+          const c = await App.api('POST', '/api/charges', { student_id: this.form.id, kind: a.kind, amount: a.amount,
+            course_id: a.kind === 'otro' ? null : a.course_id, description: a.description || null });
+          if (a.method !== 'despues') {
+            await App.api('POST', '/api/payments', { student_id: this.form.id, amount: a.amount, method: a.method, apply_to: [c.id], client_ref: App.newRef() });
+          }
+          App.toast(a.method === 'despues' ? 'Cargo anotado como deuda' : 'Cargo cobrado');
+        } else {
+          await App.api('POST', '/api/payments', { student_id: this.form.id, amount: a.amount, method: a.method, client_ref: this.acctRef });
+          App.toast('Pago registrado');
+        }
+        this.acct = null;
+        await this.open(this.form.id);
+        this.tab = 'cuenta';
+        this.load();
+      } catch (e) { App.toast(e.message, 'error'); }
+      finally { this.acctBusy = false; }
+    },
+    async voidCharge(c) {
+      if (!confirm(`¿Anular el cargo "${c.description}"? Si estaba pagado, el dinero queda como saldo a favor.`)) return;
+      try { await App.api('DELETE', `/api/charges/${c.id}`); await this.open(this.form.id); this.tab = 'cuenta'; this.load(); }
+      catch (e) { App.toast(e.message, 'error'); }
+    },
+    async voidPayment(p) {
+      if (!confirm(`¿Anular el pago de ${App.money(p.amount_cents)}? Lo que pagó vuelve a quedar como deuda.`)) return;
+      try { await App.api('DELETE', `/api/payments/${p.id}`); await this.open(this.form.id); this.tab = 'cuenta'; this.load(); }
+      catch (e) { App.toast(e.message, 'error'); }
     },
     async removePhoto() {
       if (!confirm('¿Quitar la foto?')) return;

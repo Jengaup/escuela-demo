@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Recepción">
+<meta name="theme-color" content="#4338ca">
+<title>Recepción · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+<script src="/assets/nfc.js"></script>
+<style>
+  .big-btn { min-height: 88px; font-size: 1.5rem; font-weight: 700; border-radius: 1.25rem; }
+  .huge { font-size: clamp(2rem, 5vw, 3.25rem); line-height: 1.1; }
+</style>
+</head>
+<body class="min-h-dvh flex flex-col bg-stone-100" x-data="recepcion()">
+
+<!-- Barra superior mínima -->
+<header class="bg-white border-b border-stone-200 no-print">
+  <div class="max-w-4xl mx-auto px-4 h-14 flex items-center gap-3">
+    <span class="w-8 h-8 rounded-lg bg-accent text-white grid place-items-center text-sm font-bold">E</span>
+    <span class="font-semibold text-stone-900">Recepción</span>
+    <span class="text-stone-500 text-sm hidden sm:inline" x-text="clock"></span>
+    <div class="ml-auto flex items-center gap-3 text-sm">
+      <span class="text-stone-600 truncate max-w-[9rem]" x-text="userName"></span>
+      <a href="/" class="btn-ghost" x-show="isAdmin" x-cloak>Menú</a>
+      <button type="button" class="btn-ghost" @click="App.logout()">Salir</button>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 w-full max-w-4xl mx-auto p-4 flex flex-col">
+
+  <!-- 1. Esperando chapita -->
+  <section x-show="view === 'idle'" class="flex-1 flex flex-col items-center justify-center text-center gap-6 py-6">
+    <div class="relative w-44 h-44 grid place-items-center">
+      <span class="absolute inset-0 rounded-full bg-accent opacity-10 animate-ping" x-show="readerReady"></span>
+      <div class="relative w-40 h-40 rounded-full bg-accent text-white grid place-items-center shadow-lg">
+        <svg class="w-20 h-20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8.5 7.5a6 6 0 010 9M12 5a9.5 9.5 0 010 14M15.5 2.5a13 13 0 010 19" stroke-linecap="round"/><circle cx="5" cy="12" r="1.6" fill="currentColor"/>
+        </svg>
+      </div>
+    </div>
+    <h1 class="huge font-bold text-stone-900">Pase la chapita</h1>
+    <p class="text-xl text-stone-500" x-text="readerHint"></p>
+    <button type="button" class="btn btn-primary big-btn px-8" x-show="nfcSupported && !nfcOn" @click="startNfc()">Activar lector</button>
+    <div class="w-full max-w-md pt-4">
+      <button type="button" class="btn btn-secondary big-btn w-full" @click="openSearch()">Olvidó la chapita</button>
+    </div>
+    <button type="button" class="text-sm text-stone-500 underline" x-show="demo" x-cloak @click="simulate()">Simular chapita (demo)</button>
+  </section>
+
+  <!-- Cargando -->
+  <section x-show="view === 'loading'" x-cloak class="flex-1 grid place-items-center">
+    <p class="text-2xl text-stone-500">Buscando…</p>
+  </section>
+
+  <!-- 2. Estudiante: cobrar la clase -->
+  <section x-show="view === 'student'" x-cloak class="flex-1 flex flex-col gap-4">
+    <template x-if="st">
+      <div class="flex flex-col gap-4">
+        <div class="card p-4 sm:p-5 flex items-center gap-4 sm:gap-6">
+          <div class="w-28 h-28 sm:w-36 sm:h-36 shrink-0 rounded-2xl overflow-hidden bg-stone-100 grid place-items-center text-4xl font-semibold text-stone-500">
+            <img x-show="photo" :src="photo" alt="" class="w-full h-full object-cover">
+            <span x-show="!photo" x-text="st.first_name[0] + st.last_name[0]"></span>
+          </div>
+          <div class="min-w-0">
+            <h2 class="huge font-bold text-stone-900" x-text="`${st.first_name} ${st.last_name}`"></h2>
+            <p class="text-xl text-stone-600 mt-1" x-text="`${session.course_name} · ${App.fmtTime(session.start_time)}`"></p>
+            <p class="text-stone-500" x-show="st.guardian_name" x-text="`Encargado: ${st.guardian_name}`"></p>
+          </div>
+        </div>
+
+        <p class="text-xl font-semibold text-emerald-900 bg-emerald-100 rounded-xl px-4 py-3" x-show="notice" x-text="'✓ ' + notice"></p>
+        <p class="text-lg text-amber-900 bg-amber-100 rounded-xl px-4 py-3" x-show="st.notes" x-text="'Nota: ' + st.notes"></p>
+        <p class="text-xl font-semibold text-red-800 bg-red-100 rounded-xl px-4 py-3" x-show="st.other_due_cents > 0"
+          x-text="`Debe ${App.money(st.other_due_cents)} de antes`"></p>
+        <p class="text-xl font-semibold text-emerald-800 bg-emerald-100 rounded-xl px-4 py-3" x-show="st.credit_cents > 0"
+          x-text="`Tiene ${App.money(st.credit_cents)} a favor`"></p>
+
+        <!-- Clase ya pagada (saldo a favor) -->
+        <template x-if="st.charge_id && !st.class_due_cents && !st.other_due_cents">
+          <div class="flex flex-col gap-4">
+            <div class="card p-5 text-center text-2xl font-semibold text-emerald-700">✓ La clase de hoy ya está pagada</div>
+            <button type="button" class="btn btn-primary big-btn" @click="finish(null)">Listo</button>
+          </div>
+        </template>
+
+        <!-- Cobro -->
+        <template x-if="!(st.charge_id && !st.class_due_cents && !st.other_due_cents)">
+          <div class="flex flex-col gap-4">
+            <div class="card p-4 sm:p-5 flex flex-wrap items-center gap-3">
+              <div class="flex-1 min-w-[10rem]">
+                <div class="text-stone-500" x-text="payAll ? 'Total a cobrar' : 'Clase de hoy'"></div>
+                <div class="text-4xl font-bold text-stone-900" x-text="App.money(cents(amount))"></div>
+              </div>
+              <label class="flex items-center gap-3 text-lg min-h-[56px] cursor-pointer" x-show="st.other_due_cents > 0">
+                <input type="checkbox" class="w-7 h-7 accent-indigo-700" x-model="payAll" @change="setAmount()">
+                Cobrar también lo que debe
+              </label>
+              <div class="w-full flex items-center gap-2 text-stone-600">
+                <label for="amt">Cambiar monto $</label>
+                <input id="amt" class="input max-w-[9rem] text-lg" inputmode="decimal" x-model="amount">
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <template x-for="m in methods" :key="m">
+                <button type="button" class="btn btn-primary big-btn" :disabled="busy || cents(amount) <= 0" @click="finish(m)" x-text="App.METHOD_LABEL[m]"></button>
+              </template>
+            </div>
+            <button type="button" class="btn big-btn bg-amber-100 text-amber-900 border border-amber-300" :disabled="busy" @click="finish(null)">
+              Paga después (queda debiendo)
+            </button>
+          </div>
+        </template>
+
+        <div class="flex flex-wrap gap-3 justify-between pt-2">
+          <button type="button" class="btn btn-ghost text-lg" @click="reset()">‹ Cancelar</button>
+          <button type="button" class="btn btn-secondary text-lg" @click="openOther()">Otro cobro (examen, matrícula…)</button>
+        </div>
+      </div>
+    </template>
+  </section>
+
+  <!-- 3. Listo: entregar banda -->
+  <section x-show="view === 'done'" x-cloak class="flex-1 flex flex-col items-center justify-center text-center gap-5 py-6 rounded-3xl"
+    :class="done.owes ? 'bg-amber-50' : 'bg-emerald-50'">
+    <div class="w-24 h-24 rounded-full grid place-items-center text-white text-5xl" :class="done.owes ? 'bg-amber-500' : 'bg-emerald-500'">✓</div>
+    <h2 class="huge font-bold text-stone-900" x-text="done.name"></h2>
+    <p class="text-2xl" :class="done.owes ? 'text-amber-900' : 'text-emerald-800'" x-text="done.line"></p>
+    <template x-if="done.band">
+      <div class="card px-6 py-5 flex items-center gap-4">
+        <span class="w-14 h-14 rounded-full border-4 border-white shadow" :style="`background:${bandHex(done.band)}`"></span>
+        <span class="text-2xl">Entrégale la banda <strong x-text="done.band.split('-')[0].toUpperCase()"></strong></span>
+      </div>
+    </template>
+    <button type="button" class="btn btn-primary big-btn px-16 mt-2" @click="reset()">Listo</button>
+    <p class="text-stone-500" x-text="`Vuelve sola en ${countdown} segundos`"></p>
+  </section>
+
+  <!-- Sin clase hoy: puede pagar otra cosa -->
+  <section x-show="view === 'noclass'" x-cloak class="flex-1 flex flex-col items-center justify-center text-center gap-5 py-6 rounded-3xl bg-white">
+    <p class="huge font-bold text-stone-900" x-text="`${st?.first_name || ''} no tiene clase hoy`"></p>
+    <p class="text-xl text-stone-500">Si viene a pagar algo (deuda, examen, matrícula, adelanto), toca el botón.</p>
+    <button type="button" class="btn btn-primary big-btn px-10" @click="openOther()">Cobrar otra cosa</button>
+    <button type="button" class="btn btn-ghost text-lg" @click="reset()">‹ Volver</button>
+  </section>
+
+  <!-- Error -->
+  <section x-show="view === 'error'" x-cloak class="flex-1 flex flex-col items-center justify-center text-center gap-5 py-6 rounded-3xl bg-red-50">
+    <div class="w-24 h-24 rounded-full bg-red-600 text-white grid place-items-center text-5xl">!</div>
+    <p class="huge font-bold text-red-900 max-w-2xl" x-text="errorMsg"></p>
+    <button type="button" class="btn btn-primary big-btn px-16" @click="reset()">Volver</button>
+  </section>
+
+  <!-- Olvidó la chapita: buscar por nombre -->
+  <section x-show="view === 'search'" x-cloak class="flex-1 flex flex-col gap-4">
+    <h2 class="text-3xl font-bold text-stone-900">¿Quién es?</h2>
+    <input type="search" class="input text-2xl" style="min-height:72px" placeholder="Escribe el nombre…" x-model="q" @input.debounce.250ms="search()" x-ref="q" aria-label="Nombre">
+    <div class="grid gap-3 sm:grid-cols-2">
+      <template x-for="s in results" :key="s.id">
+        <button type="button" class="card p-4 text-left text-xl font-semibold min-h-[72px] hover:border-accent border-2 border-transparent" @click="pickStudent(s)"
+          x-text="`${s.first_name} ${s.last_name}`"></button>
+      </template>
+    </div>
+    <p class="text-lg text-stone-500" x-show="q.length >= 2 && !results.length">No aparece nadie con ese nombre.</p>
+    <template x-if="classChoices.length">
+      <div class="card p-4 flex flex-col gap-3">
+        <p class="text-xl font-semibold">¿A cuál clase viene?</p>
+        <template x-for="c in classChoices" :key="c.id">
+          <button type="button" class="btn btn-secondary big-btn" @click="loadStudent(c.id, chosen.id)" x-text="`${c.course_name} · ${App.fmtTime(c.start_time)}`"></button>
+        </template>
+      </div>
+    </template>
+    <button type="button" class="btn btn-ghost text-lg self-start" @click="reset()">‹ Volver</button>
+  </section>
+
+  <!-- Otro cobro -->
+  <section x-show="view === 'other'" x-cloak class="flex-1 flex flex-col gap-4">
+    <template x-if="st">
+      <div class="flex flex-col gap-4">
+        <h2 class="text-3xl font-bold text-stone-900" x-text="`Otro cobro · ${st.first_name} ${st.last_name}`"></h2>
+        <p class="text-xl font-semibold text-red-800 bg-red-100 rounded-xl px-4 py-3" x-show="account.due_cents > 0" x-text="`Debe en total ${App.money(account.due_cents)}`"></p>
+        <p class="text-xl font-semibold text-emerald-800 bg-emerald-100 rounded-xl px-4 py-3" x-show="account.credit_cents > 0" x-text="`Tiene ${App.money(account.credit_cents)} a favor`"></p>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <template x-for="k in otherKinds" :key="k.key">
+            <button type="button" class="btn big-btn text-xl" :class="other.kind === k.key ? 'btn-primary' : 'btn-secondary'" @click="chooseOther(k.key)" x-text="k.label"
+              :disabled="k.key === 'deuda' && !account.due_cents"></button>
+          </template>
+        </div>
+
+        <template x-if="other.kind">
+          <div class="card p-4 sm:p-5 flex flex-col gap-4">
+            <template x-if="other.kind !== 'deuda' && other.kind !== 'adelanto' && account.courses.length > 1">
+              <div class="flex flex-wrap gap-2">
+                <template x-for="c in account.courses" :key="c.id">
+                  <button type="button" class="btn" :class="other.course_id === c.id ? 'btn-primary' : 'btn-secondary'" @click="other.course_id = c.id; prefillOther()" x-text="c.name"></button>
+                </template>
+              </div>
+            </template>
+            <div x-show="other.kind === 'otro'">
+              <label class="label" for="odesc">¿Qué se cobra?</label>
+              <input id="odesc" class="input text-lg" x-model="other.description" maxlength="120" placeholder="Ej. Uniforme, materiales…">
+            </div>
+            <div class="flex items-center gap-3">
+              <label class="text-xl" for="oamt">Monto $</label>
+              <input id="oamt" class="input text-2xl max-w-[10rem]" inputmode="decimal" x-model="other.amount">
+            </div>
+            <p class="text-stone-600" x-show="other.kind === 'adelanto'">Queda como saldo a favor y se descuenta solo en las próximas clases.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <template x-for="m in methods" :key="m">
+                <button type="button" class="btn btn-primary big-btn" :disabled="busy || cents(other.amount) <= 0 || (other.kind === 'otro' && !other.description.trim())"
+                  @click="payOther(m)" x-text="App.METHOD_LABEL[m]"></button>
+              </template>
+            </div>
+            <button type="button" class="btn big-btn bg-amber-100 text-amber-900 border border-amber-300" x-show="['examen','matricula','otro'].includes(other.kind)"
+              :disabled="busy || cents(other.amount) <= 0 || (other.kind === 'otro' && !other.description.trim())" @click="payOther(null)">
+              Paga después (queda debiendo)
+            </button>
+          </div>
+        </template>
+        <button type="button" class="btn btn-ghost text-lg self-start" @click="view = session ? 'student' : 'noclass'">‹ Volver</button>
+      </div>
+    </template>
+  </section>
+</main>
+
+<script>
+const BAND_HEX = { Azul: '#2563eb', Verde: '#16a34a', Amarillo: '#facc15', Rojo: '#dc2626', Morado: '#7c3aed', Anaranjado: '#f97316', Rosa: '#ec4899' };
+
+function recepcion() {
+  return {
+    view: 'idle', clock: '', userName: '', isAdmin: false, demo: false,
+    nfcSupported: NfcInput.webNfcSupported, nfcOn: false,
+    methods: ['efectivo', 'ath_movil', 'tarjeta'],
+    session: null, st: null, photo: '', amount: '', payAll: false, ref: '', busy: false, notice: '',
+    done: {}, countdown: 0, timer: null, errorMsg: '',
+    q: '', results: [], classChoices: [], chosen: null,
+    account: { due_cents: 0, credit_cents: 0, courses: [] },
+    other: { kind: '', amount: '', description: '', course_id: null },
+    otherKinds: [{ key: 'examen', label: 'Examen' }, { key: 'matricula', label: 'Matrícula' }, { key: 'deuda', label: 'Pagar deuda' },
+                 { key: 'adelanto', label: 'Pago adelantado' }, { key: 'otro', label: 'Otro' }],
+
+    get readerReady() { return this.nfcOn || !this.nfcSupported; },
+    get readerHint() {
+      if (this.nfcOn) return 'Acerca la chapita a la parte de atrás de la tablet';
+      if (this.nfcSupported) return 'Toca "Activar lector" para empezar';
+      return 'Pásala por el lector';
+    },
+
+    init() {
+      App.me().then((r) => { this.userName = r.user.name; this.isAdmin = r.user.role === 'admin'; this.demo = r.demo; });
+      NfcInput.on((uid) => this.tap(uid));
+      const tick = () => (this.clock = new Date().toLocaleString('es-PR', { timeZone: 'America/Puerto_Rico', weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }));
+      tick(); setInterval(tick, 30000);
+    },
+    cents(v) { const n = parseFloat(String(v).replace(/[$,\s]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : 0; },
+    bandHex(code) { return BAND_HEX[(code || '').split('-')[0]] || '#a8a29e'; },
+    async startNfc() {
+      try { await NfcInput.startWebNfc(); this.nfcOn = true; } catch (e) { this.fail(e.message); }
+    },
+    fail(msg) {
+      clearInterval(this.timer);
+      this.errorMsg = msg;
+      this.view = 'error';
+      this.autoReturn(8);
+    },
+    autoReturn(sec) {
+      clearInterval(this.timer);
+      this.countdown = sec;
+      this.timer = setInterval(() => { if (--this.countdown <= 0) this.reset(); }, 1000);
+    },
+    reset() {
+      clearInterval(this.timer);
+      Object.assign(this, { view: 'idle', st: null, session: null, photo: '', notice: '', q: '', results: [], classChoices: [], chosen: null, busy: false });
+    },
+
+    // Llega una chapita (en cualquier pantalla): reemplaza lo que haya.
+    async tap(uid) {
+      clearInterval(this.timer);
+      this.view = 'loading';
+      try {
+        const r = await App.api('POST', '/api/checkin/tap', { uid });
+        this.notice = '';
+        await this.loadStudent(r.session_id, r.student_id);
+      } catch (e) {
+        if (e.status === 409 && e.data?.student_id) return this.noClass(e.data.student_id);
+        this.fail(e.message);
+      }
+    },
+    async simulate() {
+      const day = await App.api('GET', '/api/checkin/day');
+      for (const s of day.sessions) {
+        const r = await App.api('GET', `/api/checkin/session/${s.id}`);
+        const pend = r.students.filter((x) => x.has_nfc && !x.attendance_id);
+        if (pend.length) {
+          const pick = pend[Math.floor(Math.random() * pend.length)];
+          const d = await App.api('GET', `/api/students/${pick.id}`);
+          return NfcInput.simulate(d.student.nfc_uid);
+        }
+      }
+      this.fail('No quedan estudiantes con chapita por llegar hoy.');
+    },
+    async loadStudent(sessionId, studentId) {
+      this.view = 'loading';
+      try {
+        const r = await App.api('GET', `/api/checkin/session/${sessionId}/student/${studentId}`);
+        this.session = r.session;
+        this.st = r.student;
+        this.photo = '';
+        this.payAll = false;
+        this.ref = App.newRef();
+        this.setAmount();
+        this.view = 'student';
+        if (r.student.has_photo) App.api('GET', `/api/students/${studentId}/photo`).then((p) => { if (this.st?.id === studentId) this.photo = p.photo; }).catch(() => {});
+      } catch (e) { this.fail(e.message); }
+    },
+    async noClass(studentId) {
+      try {
+        const d = await App.api('GET', `/api/students/${studentId}`);
+        this.st = d.student;
+        this.session = null;
+        this.view = 'noclass';
+        this.autoReturn(30);
+      } catch (e) { this.fail(e.message); }
+    },
+    setAmount() {
+      const s = this.st;
+      const cls = s.charge_id ? s.class_due_cents : this.session.price_cents; // si aún no llegó, se cobra el precio del curso
+      this.amount = ((this.payAll ? cls + s.other_due_cents : (cls || s.other_due_cents)) / 100).toFixed(2);
+    },
+
+    // Cobrar (method) o "paga después" (null). Siempre marca asistencia y banda.
+    async finish(method) {
+      this.busy = true;
+      const body = { session_id: this.session.id, student_id: this.st.id, wristband: true };
+      if (method) body.payment = { method, amount: this.amount, client_ref: this.ref };
+      try {
+        const r = await App.api('POST', '/api/checkin', body);
+        const s = r.student;
+        const owes = s.class_due_cents + s.other_due_cents;
+        this.done = {
+          name: s.first_name,
+          band: this.session.band,
+          owes: owes > 0,
+          line: method
+            ? `Cobrado ${App.money(this.cents(this.amount))} · ${App.METHOD_LABEL[method]}${owes ? ` · Todavía debe ${App.money(owes)}` : ''}`
+            : owes ? `Queda debiendo ${App.money(owes)}` : 'Clase pagada con saldo a favor',
+        };
+        this.view = 'done';
+        this.autoReturn(12);
+      } catch (e) {
+        if (e.status === 409 && /ya está pagada/.test(e.message)) {
+          this.done = { name: this.st.first_name, band: this.session.band, owes: false, line: 'La clase ya estaba pagada' };
+          this.view = 'done';
+          this.autoReturn(12);
+        } else this.fail(e.message);
+      } finally { this.busy = false; }
+    },
+
+    // ----- Olvidó la chapita -----
+    openSearch() {
+      this.view = 'search';
+      this.q = ''; this.results = []; this.classChoices = []; this.chosen = null;
+      this.$nextTick(() => this.$refs.q?.focus());
+    },
+    async search() {
+      this.classChoices = [];
+      if (this.q.trim().length < 2) { this.results = []; return; }
+      try { this.results = (await App.api('GET', `/api/students?q=${encodeURIComponent(this.q.trim())}`)).students.slice(0, 12); }
+      catch (e) { this.fail(e.message); }
+    },
+    async pickStudent(s) {
+      this.chosen = s;
+      try {
+        const r = await App.api('GET', `/api/checkin/student/${s.id}/today`);
+        if (!r.sessions.length) return this.noClass(s.id);
+        if (r.sessions.length === 1) return this.loadStudent(r.sessions[0].id, s.id);
+        this.classChoices = r.sessions;
+      } catch (e) { this.fail(e.message); }
+    },
+
+    // ----- Otro cobro -----
+    async openOther() {
+      clearInterval(this.timer);
+      try {
+        this.account = await App.api('GET', `/api/students/${this.st.id}/account`);
+        this.other = { kind: '', amount: '', description: '', course_id: this.account.courses[0]?.id || null };
+        this.ref = App.newRef();
+        this.view = 'other';
+      } catch (e) { this.fail(e.message); }
+    },
+    chooseOther(kind) { this.other.kind = kind; this.prefillOther(); },
+    prefillOther() {
+      const c = this.account.courses.find((x) => x.id === this.other.course_id);
+      const k = this.other.kind;
+      const v = k === 'examen' ? c?.exam_fee_cents : k === 'matricula' ? c?.enrollment_fee_cents : k === 'deuda' ? this.account.due_cents : 0;
+      this.other.amount = v ? (v / 100).toFixed(2) : '';
+    },
+    async payOther(method) {
+      this.busy = true;
+      const o = this.other;
+      const label = this.otherKinds.find((k) => k.key === o.kind).label;
+      try {
+        let chargeId = null;
+        if (['examen', 'matricula', 'otro'].includes(o.kind)) {
+          const c = await App.api('POST', '/api/charges', {
+            student_id: this.st.id, kind: o.kind, amount: o.amount, course_id: o.kind === 'otro' ? null : o.course_id,
+            description: o.kind === 'otro' ? o.description : null,
+          });
+          chargeId = c.id;
+        }
+        let bal = null;
+        if (method) {
+          bal = await App.api('POST', '/api/payments', {
+            student_id: this.st.id, amount: o.amount, method, client_ref: this.ref, apply_to: chargeId ? [chargeId] : [],
+            note: o.kind === 'adelanto' ? 'Pago adelantado' : null,
+          });
+        } else {
+          bal = (await App.api('GET', `/api/students/${this.st.id}/account`));
+        }
+        const line = method
+          ? `${label}: cobrado ${App.money(this.cents(o.amount))} · ${App.METHOD_LABEL[method]}` + (bal.due_cents ? ` · Debe ${App.money(bal.due_cents)}` : bal.credit_cents ? ` · A favor ${App.money(bal.credit_cents)}` : '')
+          : `${label} anotado. Queda debiendo ${App.money(bal.due_cents)}`;
+        if (this.session) {
+          // Vuelve a la ficha para terminar con la clase de hoy
+          await this.loadStudent(this.session.id, this.st.id);
+          this.notice = line;
+        } else {
+          this.done = { name: this.st.first_name, band: null, owes: bal.due_cents > 0, line };
+          this.view = 'done';
+          this.autoReturn(12);
+        }
+      } catch (e) { this.fail(e.message); }
+      finally { this.busy = false; }
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

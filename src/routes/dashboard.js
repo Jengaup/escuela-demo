@@ -13,7 +13,8 @@ export function register(r) {
         `SELECT cs.id, ${COURSE_LABEL_SQL} AS course_name, c.start_time, c.end_time, c.instructor,
                 (SELECT COUNT(*) FROM enrollments e WHERE e.course_id = c.id AND e.status = 'activo') AS enrolled,
                 (SELECT COUNT(*) FROM attendance a WHERE a.session_id = cs.id) AS attended,
-                (SELECT IFNULL(SUM(pm.amount_cents),0) FROM attendance a JOIN payments pm ON pm.attendance_id = a.id WHERE a.session_id = cs.id) AS collected
+                (SELECT IFNULL(SUM(ch.amount_cents - ch.due_cents),0) FROM attendance a JOIN charge_status ch ON ch.attendance_id = a.id WHERE a.session_id = cs.id) AS collected,
+                (SELECT IFNULL(SUM(ch.due_cents),0) FROM attendance a JOIN charge_status ch ON ch.attendance_id = a.id WHERE a.session_id = cs.id) AS pending
            FROM class_sessions cs JOIN courses c ON c.id = cs.course_id
            JOIN programs p ON p.id = c.program_id JOIN levels l ON l.id = c.level_id
           WHERE cs.date = ? ORDER BY c.start_time`
@@ -25,15 +26,17 @@ export function register(r) {
       ).bind(weekStart, today),
       db.prepare(
         `SELECT a.id, s.first_name || ' ' || s.last_name AS student, ${COURSE_LABEL_SQL} AS course_name, a.created_at,
-                pm.method, pm.amount_cents
+                ch.amount_cents, ch.due_cents
            FROM attendance a JOIN students s ON s.id = a.student_id JOIN class_sessions cs ON cs.id = a.session_id
            JOIN courses c ON c.id = cs.course_id JOIN programs p ON p.id = c.program_id JOIN levels l ON l.id = c.level_id
-           LEFT JOIN payments pm ON pm.attendance_id = a.id
+           LEFT JOIN charge_status ch ON ch.attendance_id = a.id
           WHERE cs.date = ? ORDER BY a.created_at DESC LIMIT 8`
       ).bind(today),
       db.prepare(
         `SELECT (SELECT COUNT(*) FROM students WHERE active = 1) AS students,
-                (SELECT COUNT(*) FROM courses WHERE active = 1) AS courses`
+                (SELECT COUNT(*) FROM courses WHERE active = 1) AS courses,
+                (SELECT IFNULL(SUM(due_cents), 0) FROM charge_status) AS due_cents,
+                (SELECT COUNT(DISTINCT student_id) FROM charge_status WHERE due_cents > 0) AS debtors`
       ),
     ]);
     const methods = { efectivo: 0, ath_movil: 0, tarjeta: 0 };

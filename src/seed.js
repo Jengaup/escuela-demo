@@ -9,7 +9,7 @@ export const DEMO_USERS = [
 ];
 
 // Tablas de datos (orden de borrado respeta llaves foráneas). Usuarios no se tocan.
-export const DATA_TABLES = ['wristbands', 'payments', 'attendance', 'class_sessions', 'enrollments', 'courses', 'guardians', 'student_photos', 'students', 'audit_log'];
+export const DATA_TABLES = ['payment_allocations', 'payments', 'charges', 'wristbands', 'attendance', 'class_sessions', 'enrollments', 'courses', 'guardians', 'student_photos', 'students', 'audit_log'];
 
 const FIRST_F = ['Valeria', 'Camila', 'Sofía', 'Isabella', 'Gabriela', 'Natalia', 'Andrea', 'Paola', 'Mariana', 'Kiara', 'Yaritza', 'Keishla', 'Nicole', 'Alondra', 'Génesis', 'Adriana', 'Coral', 'Zuleyka', 'Nahomy', 'Ivelisse'];
 const FIRST_M = ['Luis', 'José', 'Carlos', 'Javier', 'Joshua', 'Jean Carlos', 'Adrián', 'Daniel', 'Yadiel', 'Ángel'];
@@ -112,15 +112,16 @@ export function buildSeed(today, opts = {}) {
   const wd = weekday(today);
   const d = (n) => (wd + n) % 7;
   const courses = [
-    // id, program, level, days, start, end, price, instructor, ¿mayormente menores?
-    [1, 1, 1, [d(0), d(3)], '16:00', '17:30', 2500, 'Shirley Cardona', true],
-    [2, 1, 2, [d(1), d(5)], '17:00', '18:30', 3000, 'Shirley Cardona', true],
-    [3, 2, 1, [d(0), d(2)], '18:00', '20:00', 2000, 'Ana Luisa Pagán', false],
-    [4, 2, 3, [d(4)], '09:00', '12:00', 3500, 'Ana Luisa Pagán', false],
-    [5, 3, 2, [d(0), d(4)], '18:30', '20:30', 2800, 'Chef Rubén Arroyo', false],
+    // id, program, level, days, start, end, precio clase, instructor, ¿mayormente menores?, examen, matrícula
+    [1, 1, 1, [d(0), d(3)], '16:00', '17:30', 7500, 'Shirley Cardona', true, 4000, 5000],
+    [2, 1, 2, [d(1), d(5)], '17:00', '18:30', 8500, 'Shirley Cardona', true, 4500, 5000],
+    [3, 2, 1, [d(0), d(2)], '18:00', '20:00', 6000, 'Ana Luisa Pagán', false, 3500, 4000],
+    [4, 2, 3, [d(4)], '09:00', '12:00', 9000, 'Ana Luisa Pagán', false, 5000, 4000],
+    [5, 3, 2, [d(0), d(4)], '18:30', '20:30', 7500, 'Chef Rubén Arroyo', false, 4000, 5000],
   ];
-  inserts('courses', ['id', 'program_id', 'level_id', 'days', 'start_time', 'end_time', 'price_cents', 'instructor'],
-    courses.map((c) => [c[0], c[1], c[2], [...c[3]].sort().join(','), c[4], c[5], c[6], c[7]]), out);
+  const courseName = { 1: 'Modelaje Básico', 2: 'Modelaje Intermedio', 3: 'Costura Básico', 4: 'Costura Avanzado', 5: 'Cocina Intermedio' };
+  inserts('courses', ['id', 'program_id', 'level_id', 'days', 'start_time', 'end_time', 'price_cents', 'instructor', 'exam_fee_cents', 'enrollment_fee_cents'],
+    courses.map((c) => [c[0], c[1], c[2], [...c[3]].sort().join(','), c[4], c[5], c[6], c[7], c[9], c[10]]), out);
 
   // ---------- Matrículas ----------
   const enroll = new Map(courses.map((c) => [c[0], []]));
@@ -131,10 +132,7 @@ export function buildSeed(today, opts = {}) {
     const pool = courses.filter((c) => c[8] === minor);
     const first = pool[i % pool.length];
     const chosen = [first];
-    if (r() < 0.35) {
-      const other = pick(courses.filter((c) => c !== first));
-      chosen.push(other);
-    }
+    if (r() < 0.35) chosen.push(pick(courses.filter((c) => c !== first)));
     for (const c of chosen) {
       const status = r() < 0.06 ? 'inactivo' : 'activo';
       enrollRows.push([s[0], c[0], addDays(startDate, Math.floor(r() * 20)), status]);
@@ -152,53 +150,93 @@ export function buildSeed(today, opts = {}) {
   }
   inserts('class_sessions', ['id', 'course_id', 'date'], sessions.map((s) => [s.id, s.course[0], s.date]), out);
 
-  // ---------- Asistencia, pagos y bandas ----------
-  const att = [], pay = [], bands = [];
-  let aid = 0;
-  const staffSql = (u) => `COALESCE((SELECT id FROM users WHERE username='${u}'), (SELECT MIN(id) FROM users WHERE role='admin'))`;
+  // ---------- Cuenta de cada estudiante (misma lógica que src/ledger.js) ----------
   const staffPick = () => (r() < 0.45 ? 'staff' : r() < 0.8 ? 'staff2' : 'admin');
   const methodPick = () => { const x = r(); return x < 0.45 ? 'efectivo' : x < 0.85 ? 'ath_movil' : 'tarjeta'; };
+  const charges = [], payments = [], allocs = [];
+  const charge = (o) => { const c = { id: charges.length + 1, due: o.amount, ...o }; charges.push(c); applyCredit(o.student); return c; };
+  const payment = (o, priority = []) => { const p = { id: payments.length + 1, free: o.amount, ...o }; payments.push(p); applyCredit(o.student, priority); return p; };
+  function applyCredit(student, priority = []) {
+    const free = payments.filter((p) => p.student === student && p.free > 0);
+    const rank = (c) => { const i = priority.indexOf(c.id); return i < 0 ? priority.length : i; };
+    const open = charges.filter((c) => c.student === student && c.due > 0).sort((x, y) => rank(x) - rank(y) || x.id - y.id);
+    for (const c of open) for (const p of free) {
+      if (!c.due) break;
+      const take = Math.min(c.due, p.free);
+      if (!take) continue;
+      allocs.push([p.id, c.id, take]);
+      c.due -= take; p.free -= take;
+    }
+  }
 
+  // Eventos en orden cronológico: matrículas, pago adelantado, clases y exámenes.
+  const events = [];
+  for (const [stu, cid, date, status] of enrollRows) {
+    if (status !== 'activo') continue;
+    events.push({ t: localToIso(date, '10:00', Math.floor(r() * 300)), date, type: 'matricula', stu, course: courses[cid - 1] });
+  }
+  const advanceStu = enroll.get(3)[0];
+  events.push({ t: localToIso(addDays(today, -12), '17:30'), date: addDays(today, -12), type: 'adelanto', stu: advanceStu, amount: 4 * courses[2][6] });
+  const att = [], bands = [];
+  let aid = 0;
   for (const s of sessions) {
     const isToday = s.date === today;
-    const enrolled = enroll.get(s.course[0]);
-    // Hoy: solo la primera clase tiene algunos check-ins (para ver indicadores parciales).
     const firstToday = isToday && s === sessions.find((x) => x.date === today);
     if (isToday && !firstToday) continue;
-    enrolled.forEach((stuId, idx) => {
+    enroll.get(s.course[0]).forEach((stuId, idx) => {
       if (isToday ? idx >= 3 : r() > 0.85) return;
+      events.push({ t: localToIso(s.date, s.course[4], -10 + Math.floor(r() * 20)), date: s.date, type: 'clase', stu: stuId, session: s,
+        payNow: isToday ? idx < 2 : r() < 0.9 });
+    });
+  }
+  // Examen de la semana pasada en Modelaje Intermedio y Costura Avanzado
+  for (const cid of [2, 4]) {
+    const c = courses[cid - 1];
+    const date = addDays(today, -7);
+    for (const stu of enroll.get(cid)) events.push({ t: localToIso(date, '12:00', Math.floor(r() * 60)), date, type: 'examen', stu, course: c, payNow: r() < 0.7 });
+  }
+  events.sort((x, y) => (x.t < y.t ? -1 : 1));
+
+  for (const e of events) {
+    const user = staffPick();
+    if (e.type === 'matricula') {
+      const c = charge({ student: e.stu, kind: 'matricula', description: `Matrícula · ${courseName[e.course[0]]}`, amount: e.course[10], course: e.course[0], date: e.date, t: e.t, user });
+      if (r() < 0.9 && c.due) payment({ student: e.stu, amount: c.due, method: methodPick(), user, date: e.date, t: e.t }, [c.id]);
+    } else if (e.type === 'adelanto') {
+      payment({ student: e.stu, amount: e.amount, method: 'ath_movil', user, date: e.date, t: e.t, note: 'Pago adelantado de 4 clases' });
+    } else if (e.type === 'examen') {
+      const c = charge({ student: e.stu, kind: 'examen', description: `Examen · ${courseName[e.course[0]]}`, amount: e.course[9], course: e.course[0], date: e.date, t: e.t, user });
+      if (e.payNow && c.due) payment({ student: e.stu, amount: c.due, method: methodPick(), user, date: e.date, t: e.t }, [c.id]);
+    } else {
       const id = ++aid;
-      const t = localToIso(s.date, s.course[4], -10 + Math.floor(r() * 20));
-      const user = staffPick();
-      att.push([id, s.id, stuId, stuId > 28 || r() < 0.08 ? 'manual' : 'nfc', user, t]);
-      // Hoy: el 3er estudiante pasó la chapita pero todavía no ha pagado.
-      if (isToday && idx === 2) return;
-      if (isToday || r() < 0.95) pay.push([id, s.course[6], methodPick(), user, s.date, t]);
-      bands.push([id, 1, bandOfDay(s.date), user, t]);
-    });
+      att.push([id, e.session.id, e.stu, e.stu > 28 || r() < 0.08 ? 'manual' : 'nfc', user, e.t]);
+      const c = charge({ student: e.stu, kind: 'clase', description: `Clase ${courseName[e.session.course[0]]} · ${e.date}`, amount: e.session.course[6],
+        course: e.session.course[0], attendance: id, date: e.date, t: e.t, user });
+      if (e.payNow && c.due) payment({ student: e.stu, amount: c.due, method: methodPick(), user, date: e.date, t: e.t }, [c.id]);
+      bands.push([id, 1, bandOfDay(e.date), user, e.t]);
+    }
   }
+
   // Inserciones con subconsultas para resolver IDs de usuario por username.
-  for (let i = 0; i < att.length; i += 15) {
-    const part = att.slice(i, i + 15);
-    out.push({
-      sql: `INSERT INTO attendance (id, session_id, student_id, check_in_method, recorded_by, created_at) VALUES ${part.map((a) => `(?,?,?,?,${staffSql(a[4])},?)`).join(',')}`,
-      params: part.flatMap((a) => [a[0], a[1], a[2], a[3], a[5]]),
-    });
-  }
-  for (let i = 0; i < pay.length; i += 12) {
-    const part = pay.slice(i, i + 12);
-    out.push({
-      sql: `INSERT INTO payments (attendance_id, amount_cents, method, received_by, local_date, created_at) VALUES ${part.map((p) => `(?,?,?,${staffSql(p[3])},?,?)`).join(',')}`,
-      params: part.flatMap((p) => [p[0], p[1], p[2], p[4], p[5]]),
-    });
-  }
-  for (let i = 0; i < bands.length; i += 20) {
-    const part = bands.slice(i, i + 20);
-    out.push({
-      sql: `INSERT INTO wristbands (attendance_id, delivered, code, delivered_by, delivered_at) VALUES ${part.map((b) => `(?,?,?,${staffSql(b[3])},?)`).join(',')}`,
-      params: part.flatMap((b) => [b[0], b[1], b[2], b[4]]),
-    });
-  }
+  const staffSql = (u) => `COALESCE((SELECT id FROM users WHERE username='${u}'), (SELECT MIN(id) FROM users WHERE role='admin'))`;
+  const multi = (table, cols, rows, userCol) => {
+    const params = cols.length - 1;
+    const per = Math.floor(99 / params);
+    for (let i = 0; i < rows.length; i += per) {
+      const part = rows.slice(i, i + per);
+      out.push({
+        sql: `INSERT INTO ${table} (${cols.join(',')}) VALUES ${part.map((row) => `(${cols.map((_, k) => (k === userCol ? staffSql(row[k]) : '?')).join(',')})`).join(',')}`,
+        params: part.flatMap((row) => row.filter((_, k) => k !== userCol)),
+      });
+    }
+  };
+  multi('attendance', ['id', 'session_id', 'student_id', 'check_in_method', 'recorded_by', 'created_at'], att, 4);
+  multi('charges', ['id', 'student_id', 'kind', 'description', 'amount_cents', 'attendance_id', 'course_id', 'local_date', 'created_at', 'created_by'],
+    charges.map((c) => [c.id, c.student, c.kind, c.description, c.amount, c.attendance ?? null, c.course, c.date, c.t, c.user]), 9);
+  multi('payments', ['id', 'student_id', 'amount_cents', 'method', 'local_date', 'note', 'created_at', 'received_by'],
+    payments.map((p) => [p.id, p.student, p.amount, p.method, p.date, p.note ?? null, p.t, p.user]), 7);
+  inserts('payment_allocations', ['payment_id', 'charge_id', 'amount_cents'], allocs, out);
+  multi('wristbands', ['attendance_id', 'delivered', 'code', 'delivered_by', 'delivered_at'], bands, 3);
 
   return out;
 }

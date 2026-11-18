@@ -35,6 +35,8 @@
           <dt class="text-stone-400">Horario</dt><dd x-text="`${App.daysLabel(c.days)} · ${App.fmtTime(c.start_time)} – ${App.fmtTime(c.end_time)}`"></dd>
           <dt class="text-stone-400">Instructor</dt><dd x-text="c.instructor"></dd>
           <dt class="text-stone-400">Precio</dt><dd x-text="`${App.money(c.price_cents)} por clase`"></dd>
+          <dt class="text-stone-400">Examen</dt><dd x-text="c.exam_fee_cents ? App.money(c.exam_fee_cents) : '—'"></dd>
+          <dt class="text-stone-400">Matrícula</dt><dd x-text="c.enrollment_fee_cents ? App.money(c.enrollment_fee_cents) : '—'"></dd>
           <dt class="text-stone-400">Matrícula</dt><dd x-text="`${c.enrolled} activos`"></dd>
         </dl>
         <div class="flex gap-2 mt-auto">
@@ -73,6 +75,8 @@
           <div><label class="label" for="st">Hora inicio</label><input id="st" type="time" class="input" x-model="form.start_time"></div>
           <div><label class="label" for="et">Hora fin</label><input id="et" type="time" class="input" x-model="form.end_time"><p class="field-error" x-text="errors.end_time"></p></div>
           <div><label class="label" for="pr">Precio por clase ($)</label><input id="pr" class="input" inputmode="decimal" x-model="form.price"><p class="field-error" x-text="errors.price"></p></div>
+          <div><label class="label" for="ex">Costo de examen ($)</label><input id="ex" class="input" inputmode="decimal" x-model="form.exam_fee" placeholder="0.00"><p class="field-error" x-text="errors.exam_fee"></p></div>
+          <div><label class="label" for="mt">Costo de matrícula ($)</label><input id="mt" class="input" inputmode="decimal" x-model="form.enrollment_fee" placeholder="0.00"><p class="field-error" x-text="errors.enrollment_fee"></p></div>
           <div><label class="label" for="in">Instructor</label><input id="in" class="input" x-model="form.instructor" maxlength="100"><p class="field-error" x-text="errors.instructor"></p></div>
         </div>
         <label class="flex items-center gap-2"><input type="checkbox" class="w-5 h-5 accent-indigo-700" x-model="form.active"> Curso activo</label>
@@ -141,8 +145,9 @@ function courses() {
       this.errors = {}; this.error = '';
       this.form = c
         ? { id: c.id, program_id: c.program_id, level_id: c.level_id, days: c.days.split(',').map(Number), start_time: c.start_time, end_time: c.end_time,
-            price: (c.price_cents / 100).toFixed(2), instructor: c.instructor, active: !!c.active }
-        : { id: null, program_id: 1, level_id: 1, days: [], start_time: '18:00', end_time: '20:00', price: '25.00', instructor: '', active: true };
+            price: (c.price_cents / 100).toFixed(2), exam_fee: (c.exam_fee_cents / 100).toFixed(2), enrollment_fee: (c.enrollment_fee_cents / 100).toFixed(2),
+            instructor: c.instructor, active: !!c.active }
+        : { id: null, program_id: 1, level_id: 1, days: [], start_time: '18:00', end_time: '20:00', price: '75.00', exam_fee: '', enrollment_fee: '', instructor: '', active: true };
     },
     toggleDay(i) { this.form.days = this.form.days.includes(i) ? this.form.days.filter((d) => d !== i) : [...this.form.days, i]; },
     async save() {

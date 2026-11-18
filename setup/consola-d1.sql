@@ -47,11 +47,19 @@ CREATE TABLE students (
   phone         TEXT,
   email         TEXT,
   notes         TEXT,
+  nfc_uid       TEXT,
   active        INTEGER NOT NULL DEFAULT 1,
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX idx_students_name ON students(last_name, first_name);
+CREATE UNIQUE INDEX idx_students_nfc ON students(nfc_uid) WHERE nfc_uid IS NOT NULL;
+
+CREATE TABLE student_photos (
+  student_id INTEGER PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
+  photo      TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
 
 CREATE TABLE guardians (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,6 +79,8 @@ CREATE TABLE courses (
   start_time  TEXT NOT NULL,
   end_time    TEXT NOT NULL,
   price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
+  exam_fee_cents       INTEGER NOT NULL DEFAULT 0 CHECK (exam_fee_cents >= 0),
+  enrollment_fee_cents INTEGER NOT NULL DEFAULT 0 CHECK (enrollment_fee_cents >= 0),
   instructor  TEXT NOT NULL,
   active      INTEGER NOT NULL DEFAULT 1,
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
@@ -95,28 +105,59 @@ CREATE TABLE class_sessions (
 CREATE INDEX idx_sessions_date ON class_sessions(date);
 
 CREATE TABLE attendance (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id  INTEGER NOT NULL REFERENCES class_sessions(id) ON DELETE CASCADE,
-  student_id  INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-  signature   TEXT,
-  signed_by   TEXT CHECK (signed_by IN ('encargado','estudiante')),
-  signed_at   TEXT,
-  recorded_by INTEGER REFERENCES users(id),
-  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id      INTEGER NOT NULL REFERENCES class_sessions(id) ON DELETE CASCADE,
+  student_id      INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  check_in_method TEXT NOT NULL DEFAULT 'manual' CHECK (check_in_method IN ('nfc','manual')),
+  recorded_by     INTEGER REFERENCES users(id),
+  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   UNIQUE (session_id, student_id)
 );
 CREATE INDEX idx_attendance_student ON attendance(student_id);
 
-CREATE TABLE payments (
+CREATE TABLE charges (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  attendance_id INTEGER NOT NULL UNIQUE REFERENCES attendance(id) ON DELETE CASCADE,
-  amount_cents  INTEGER NOT NULL CHECK (amount_cents >= 0),
-  method        TEXT NOT NULL CHECK (method IN ('efectivo','ath_movil','tarjeta')),
-  received_by   INTEGER NOT NULL REFERENCES users(id),
+  student_id    INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  kind          TEXT NOT NULL CHECK (kind IN ('clase','examen','matricula','otro')),
+  description   TEXT NOT NULL,
+  amount_cents  INTEGER NOT NULL CHECK (amount_cents > 0),
+  attendance_id INTEGER UNIQUE REFERENCES attendance(id) ON DELETE CASCADE,
+  course_id     INTEGER REFERENCES courses(id) ON DELETE SET NULL,
   local_date    TEXT NOT NULL,
+  created_by    INTEGER REFERENCES users(id),
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+CREATE INDEX idx_charges_student ON charges(student_id, created_at);
+
+CREATE TABLE payments (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id   INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+  method       TEXT NOT NULL CHECK (method IN ('efectivo','ath_movil','tarjeta')),
+  received_by  INTEGER NOT NULL REFERENCES users(id),
+  local_date   TEXT NOT NULL,
+  note         TEXT,
+  client_ref   TEXT UNIQUE,
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
 CREATE INDEX idx_payments_date ON payments(local_date);
+CREATE INDEX idx_payments_student ON payments(student_id, created_at);
+
+CREATE TABLE payment_allocations (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  payment_id   INTEGER NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  charge_id    INTEGER NOT NULL REFERENCES charges(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0)
+);
+CREATE INDEX idx_alloc_payment ON payment_allocations(payment_id);
+CREATE INDEX idx_alloc_charge ON payment_allocations(charge_id);
+
+CREATE VIEW charge_status AS
+  SELECT c.*, c.amount_cents - IFNULL((SELECT SUM(pa.amount_cents) FROM payment_allocations pa WHERE pa.charge_id = c.id), 0) AS due_cents
+    FROM charges c;
+CREATE VIEW payment_status AS
+  SELECT p.*, p.amount_cents - IFNULL((SELECT SUM(pa.amount_cents) FROM payment_allocations pa WHERE pa.payment_id = p.id), 0) AS free_cents
+    FROM payments p;
 
 CREATE TABLE wristbands (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,17 +184,6 @@ CREATE INDEX idx_audit_created ON audit_log(created_at);
 INSERT INTO programs (name) VALUES ('Modelaje'), ('Costura'), ('Cocina');
 INSERT INTO levels (name, sort_order) VALUES ('Básico', 1), ('Intermedio', 2), ('Avanzado', 3);
 
-ALTER TABLE students ADD COLUMN nfc_uid TEXT;
-CREATE UNIQUE INDEX idx_students_nfc ON students(nfc_uid) WHERE nfc_uid IS NOT NULL;
-
-CREATE TABLE student_photos (
-  student_id INTEGER PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
-  photo      TEXT NOT NULL,
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-ALTER TABLE attendance ADD COLUMN check_in_method TEXT NOT NULL DEFAULT 'manual' CHECK (check_in_method IN ('nfc','manual'));
-
-INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('admin', 'Administración', 'admin', 'd161843ef6d130c2f61caddb7033cb8962933f801ea703dd269789e91c0dd167', '086e889d6058a9ce4debcf79a898a825', 100000);
-INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('staff', 'Carmen Rivera', 'staff', 'a40e9b9b4452181028d5e46ab7e3afe53efdceefa027b6f88afad8c9193b6303', 'a1b842b74f0f310eb2bfa6e810d3a551', 100000);
-INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('staff2', 'Luis Ortiz', 'staff', '69670642dd1f3b2d7d8bf1d3ef3ae2609a463e889291c5f7a2df5e369df8b45a', '27f0004dda596ab3fbd36535cdeb884f', 100000);
+INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('admin', 'Administración', 'admin', '8e350e07932302270e6aa503337db16c7c7b8501434656fd4efe3dc9a224625b', '0726e2cf9a758b866ec4fa6ca9099e91', 100000);
+INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('staff', 'Carmen Rivera', 'staff', 'd8660d03e2ad54e89d5e839a644957dcc3ca50c46461ad13ed1d84fa1e1d7d03', '53fc5a4a26d70a2009072decfc7a4bc2', 100000);
+INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('staff2', 'Luis Ortiz', 'staff', '9a06f82fb23cf038a5fa8e77a4ff061a4c1a906c1cef48dbeb401963b429a34d', '397fa34d0aadde0c7a833a58922193d7', 100000);

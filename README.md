@@ -16,20 +16,31 @@ Cambia estas contraseñas antes de usar la app con datos reales (pantalla **Usua
 
 ## Qué incluye
 
-- **Check-in del día con chapita NFC**: el estudiante pasa su chapita, la app marca la asistencia en su clase de hoy y abre su ficha con foto, encargado, notas y clases que debe. El staff toca el método de pago (monto precargado) y confirma. La banda queda marcada. Son 2 toques. Si alguien olvida la chapita, el staff lo toca en la lista y lo marca a mano. Cada estudiante muestra si llegó, si pagó y si recibió banda, y se pone verde cuando completa todo. Si no puede pagar en el momento, se usa **Cobrar después**.
-- **Lista imprimible por clase**: hoja con los matriculados y columnas de hora, firma y pago, para la administración que quiere mantener la firma en papel. Se imprime desde el check-in (con la fecha de esa clase) o desde Cursos (con la fecha en blanco).
-- **Inicio**: clases de hoy, asistentes, total cobrado por método y cobros de los últimos 7 días.
-- **Estudiantes**: crear, editar, buscar, desactivar, encargados, matrículas e historial de asistencia y pagos. Cada ficha tiene **foto** (se toma con la cámara de la tablet) y botones para **asignar, cambiar o quitar la chapita**.
-- **Cursos y matrículas**: programa, nivel, días, horario, precio por clase e instructor. Matricular y dar de baja.
-- **Cuadre de caja**: totales del día por método y por staff, detalle de cada cobro, quién asistió sin pagar y comparación con el efectivo contado. Se puede imprimir con líneas de firma.
-- **Reportes**: asistencia y pagos por rango de fechas y por curso. Exporta a CSV o Excel (.xlsx con varias hojas). El admin ve además la bitácora de auditoría.
+- **Recepción** (la única pantalla del staff, hecha para gente que no sabe de computadoras):
+  1. La pantalla dice en grande **"Pase la chapita"**.
+  2. El estudiante pasa la chapita y sale su **foto, nombre, clase y precio**, con avisos en rojo si **debe** algo y en verde si tiene **saldo a favor**.
+  3. Un toque cobra: **Efectivo**, **ATH Móvil** o **Tarjeta**. El monto se puede cambiar, y se puede **cobrar también lo que debe**. Si no tiene dinero, **Paga después** y la clase queda como deuda.
+  4. Pantalla verde (o amarilla si quedó debiendo): **"Entrégale la banda ROSA"**. Vuelve sola al inicio.
+  - **Olvidó la chapita**: se busca por nombre.
+  - **Otro cobro**: examen, matrícula, pagar deuda, pago adelantado u otro. Se puede cobrar en el momento o dejar como deuda.
+  - Si el estudiante no tiene clase ese día, igual se le puede cobrar una deuda, un examen o la matrícula.
+  - Los errores salen en palabras simples (*"Esta chapita no está registrada. Llama a la administración."*).
+  - Se puede añadir a la pantalla de inicio de la tablet como una app, y la sesión se queda abierta 30 días.
+- **Cuenta de cada estudiante**: cargos (clases, examen, matrícula, otros) y pagos. Lo que sobra de un pago queda como **saldo a favor** y paga solo las próximas clases (pago adelantado). Cada curso tiene precio por clase, costo de examen y costo de matrícula; al matricular a alguien se le carga la matrícula.
+- **Asistencia del día** (admin): lista por clase con quién llegó, pagó y recibió banda.
+- **Lista imprimible por clase**: hoja con los matriculados y columnas de hora, firma y pago, para la administración que quiere mantener la firma en papel. Se imprime desde Asistencia (con la fecha de esa clase) o desde Cursos (con la fecha en blanco).
+- **Inicio**: clases de hoy, asistentes, total cobrado por método, total por cobrar y cobros de los últimos 7 días.
+- **Estudiantes**: crear, editar, buscar, desactivar, encargados, matrículas e pestaña **Cuenta** (añadir cargo, recibir pago, anular), asistencia. Cada ficha tiene **foto** (se toma con la cámara de la tablet) y botones para **asignar, cambiar o quitar la chapita**.
+- **Cursos y matrículas**: programa, nivel, días, horario, precio por clase, costo de examen, costo de matrícula e instructor. Matricular y dar de baja.
+- **Cuadre de caja**: totales del día por método y por staff, detalle de cada cobro, en qué se aplicó (clase, examen, matrícula, saldo a favor), quién quedó debiendo y comparación con el efectivo contado. Se puede imprimir con líneas de firma.
+- **Reportes**: asistencia, pagos, resumen por curso (facturado, cobrado y pendiente) y **Deudas** (quién debe y quién tiene saldo a favor). Exporta a CSV o Excel (.xlsx con varias hojas). El admin ve además la bitácora de auditoría.
 - **Importar**: sube un Excel o CSV de estudiantes, asigna las columnas (se adivinan solas por el título), revisa la vista previa con errores y duplicados, y matricula a todos en un curso si quieres.
 - **Usuarios** (solo admin) y botón **Resetear datos demo** (solo admin, con `DEMO_MODE = "true"`).
 
 ### Roles
 
-- **Staff**: check-in, cobros, estudiantes, matrículas, cuadre, reportes e importación.
-- **Admin**: todo lo anterior, más cursos, usuarios, anular pagos o check-ins, borrar registros, auditoría y reseteo del demo.
+- **Staff**: solo ve **Recepción** (y la lista imprimible). Cualquier otra página lo devuelve a Recepción.
+- **Admin**: todo: Recepción, estudiantes, chapitas, fotos, cursos, cuadre, reportes, importación, usuarios, anulaciones, auditoría y reseteo del demo.
 
 ## Lectores de chapitas NFC
 
@@ -37,7 +48,7 @@ La app funciona con dos tipos de lector:
 
 | Tablet | Qué se necesita | Cómo se usa |
 |---|---|---|
-| **Android con NFC** (en Chrome) | Nada adicional | En Check-in se toca **Activar lector NFC** una vez y se acerca la chapita a la parte de atrás de la tablet. |
+| **Android con NFC** (en Chrome) | Nada adicional | En Recepción se toca **Activar lector** una vez y se acerca la chapita a la parte de atrás de la tablet. |
 | **iPad** (no tiene NFC) o computadora | Lector NFC USB que funcione **"como teclado"** (keyboard emulation / HID), compatible con chapitas de 13.56 MHz (NTAG/MIFARE) | Se conecta y listo. La chapita se pasa por encima del lector. |
 
 En el lector USB conviene que esté configurado para escribir el número y un **Enter** al final, que es lo normal en estos lectores. La app distingue la chapita de una persona escribiendo por la velocidad.
@@ -47,7 +58,7 @@ Hay que usar el mismo tipo de lector para asignar las chapitas y para el check-i
 ## Seguridad
 
 - Contraseñas con PBKDF2-SHA256 (Web Crypto), salt único por usuario y 100,000 iteraciones (el máximo que permite Workers).
-- Sesión en cookie `HttpOnly; Secure; SameSite=Strict` de 12 horas. En la base solo se guarda el hash SHA-256 del token.
+- Sesión en cookie `HttpOnly; Secure; SameSite=Strict` de 12 horas, o 30 días si se marca **Mantener abierta en esta tablet**. En la base solo se guarda el hash SHA-256 del token.
 - Rate limit de login: 5 intentos fallidos en 15 minutos por usuario y 20 por IP. Las tablets de una escuela suelen compartir la misma IP, por eso el límite por IP es más alto.
 - Validación de todos los datos en el servidor y consultas parametrizadas en todo el código.
 - Las acciones que cambian datos se rechazan si vienen de otro origen (además de SameSite).
@@ -66,11 +77,13 @@ escuela-demo/
 │   ├── _middleware.js         # Headers de seguridad, Origin y protección de páginas
 │   └── api/[[path]].js        # Punto de entrada de la API
 ├── src/
-│   ├── api.js router.js http.js validate.js crypto.js auth.js audit.js time.js png.js
+│   ├── api.js router.js http.js validate.js crypto.js auth.js audit.js time.js
+│   ├── ledger.js              # Cuenta del estudiante: cargos, pagos y saldo a favor
 │   ├── seed.js                # Datos demo (se usa desde Node y desde el botón de reset)
-│   └── routes/                # auth, users, checkin, students, courses, import, dashboard, reports, admin
+│   └── routes/                # auth, users, checkin, account, students, courses, import, dashboard, reports, admin
 ├── public/                    # HTML + Tailwind (CDN) + Alpine.js
 │   └── assets/                # app.js, app.css, nfc.js
+├── setup/consola-d1.sql       # Tablas + usuarios demo para pegar en la consola de D1
 ├── scripts/
 │   ├── seed.mjs               # Genera seed/seed.sql
 │   └── create-user.mjs        # Crea un usuario sin datos demo
@@ -86,7 +99,9 @@ Detalles del modelo de datos:
 - Las sesiones de clase de hoy se crean solas según los días de cada curso.
 - Cada chapita tiene un número único de fábrica (UID). No hay que programarla: se asigna pasándola por el lector desde la ficha del estudiante. Una chapita solo puede pertenecer a un estudiante; si se pasa a otro, la app pide confirmación y se la quita al anterior.
 - Si un estudiante tiene varias clases el mismo día, la chapita lo marca en la que está en curso o en la más cercana a la hora actual.
-- Un pago por asistencia y una banda por asistencia (restricción `UNIQUE`). Si dos tablets confirman al mismo tiempo, no se cobra doble.
+- Cada asistencia crea un **cargo** por el precio de la clase. Los **pagos** se reparten entre cargos (`payment_allocations`): primero el que se está cobrando y después los más viejos. Lo que sobra es **saldo a favor** y se aplica solo al próximo cargo.
+- Cada pago lleva una referencia única del botón que lo generó. Si se toca dos veces o la red reintenta, no se cobra doble.
+- Una banda por asistencia.
 - El color de la banda rota cada día (ej. `Azul-1118`), así no sirve la banda de ayer.
 
 ## Correr en tu computadora
@@ -205,6 +220,8 @@ npx wrangler d1 export escuela-demo --remote --output backup.sql
 D1 también tiene **Time Travel**, que permite restaurar la base a cualquier momento de los últimos 30 días.
 
 ## Límites del plan gratis
+
+- **Consultas por solicitud**: el plan gratis permite unas 50 consultas a D1 por solicitud. La app está hecha para quedarse por debajo: el reset del demo va en 3 pasos y la importación se envía en grupos de 40 estudiantes.
 
 - **D1**: 5 GB de almacenamiento, 5 millones de lecturas y 100,000 escrituras al día. Cada foto ocupa unos 30 a 50 KB, así que caben miles de estudiantes con foto.
 - **Workers/Pages Functions**: 100,000 solicitudes al día y 10 ms de CPU por solicitud. El login usa PBKDF2 con 100,000 iteraciones, que está cerca de ese límite. Cloudflare suele permitir picos ocasionales, pero si alguna vez ves el error 1102 al entrar, tienes dos opciones: el plan Workers Paid ($5 al mes, 30 segundos de CPU) o bajar las iteraciones en `src/crypto.js`. Cada usuario guarda sus propias iteraciones, así que los hashes viejos siguen funcionando.

@@ -28,6 +28,10 @@
         <label class="label" for="p">Contraseña</label>
         <input id="p" class="input" type="password" x-model="password" autocomplete="current-password" required>
       </div>
+      <label class="flex items-center gap-3 min-h-[48px] cursor-pointer">
+        <input type="checkbox" class="w-6 h-6 accent-indigo-700" x-model="remember">
+        <span class="text-stone-700">Mantener abierta en esta tablet</span>
+      </label>
       <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" x-cloak role="alert"></p>
       <button class="btn btn-primary w-full" :disabled="busy || !username || !password">
         <span x-text="busy ? 'Entrando…' : 'Entrar'"></span>
@@ -37,11 +41,11 @@
   <script>
     function login() {
       return {
-        username: '', password: '', error: '', busy: false,
+        username: '', password: '', remember: true, error: '', busy: false,
         async submit() {
           this.busy = true; this.error = '';
           try {
-            await App.api('POST', '/api/auth/login', { username: this.username, password: this.password });
+            await App.api('POST', '/api/auth/login', { username: this.username, password: this.password, remember: this.remember });
             location.href = '/';
           } catch (e) { this.error = e.message; this.password = ''; }
           finally { this.busy = false; }

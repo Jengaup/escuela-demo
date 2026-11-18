@@ -3,7 +3,19 @@ import { auditStmt } from '../audit.js';
 import { todayPR } from '../time.js';
 import { validateStudent, studentParams } from './students.js';
 
-const MAX_ROWS = 1000;
+const MAX_ROWS = 1000;      // validación (dry run)
+export const MAX_IMPORT = 40; // por solicitud al guardar; el navegador manda el archivo en grupos
+
+// INSERT de varias filas por consulta (D1 permite hasta 100 parámetros), para gastar pocas consultas.
+function multiInsert(db, sql, cols, rows, suffix = '') {
+  const per = Math.floor(99 / cols);
+  const out = [];
+  for (let i = 0; i < rows.length; i += per) {
+    const part = rows.slice(i, i + per);
+    out.push(db.prepare(`${sql} VALUES ${part.map(() => `(${Array(cols).fill('?').join(',')})`).join(',')} ${suffix}`).bind(...part.flat()));
+  }
+  return out;
+}
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
@@ -32,14 +44,17 @@ export function register(r) {
   r.post('/api/students/import', async (ctx) => {
     const body = await readJson(ctx.request);
     if (!Array.isArray(body.rows) || !body.rows.length) throw badRequest('No hay filas para importar');
-    if (body.rows.length > MAX_ROWS) throw badRequest(`Máximo ${MAX_ROWS} filas por importación`);
     const dryRun = !!body.dry_run;
+    if (body.rows.length > MAX_ROWS) throw badRequest(`Máximo ${MAX_ROWS} filas por importación`);
+    if (!dryRun && body.rows.length > MAX_IMPORT) throw badRequest(`Máximo ${MAX_IMPORT} filas por envío`);
     const courseId = Number(body.course_id) || null;
     const db = ctx.env.DB;
 
+    let course = null;
     if (courseId) {
-      const c = await db.prepare('SELECT id FROM courses WHERE id = ?').bind(courseId).first();
-      if (!c) throw badRequest('Curso inválido');
+      course = await db.prepare(`SELECT c.id, c.enrollment_fee_cents AS fee, p.name || ' ' || l.name AS name FROM courses c
+        JOIN programs p ON p.id = c.program_id JOIN levels l ON l.id = c.level_id WHERE c.id = ?`).bind(courseId).first();
+      if (!course) throw badRequest('Curso inválido');
     }
 
     const { results: existing } = await db.prepare('SELECT first_name, last_name, birth_date FROM students').all();
@@ -74,24 +89,25 @@ export function register(r) {
     };
     if (dryRun || !valid.length) return json({ dry_run: dryRun, summary, report, created: 0 });
 
-    // Inserción en lotes; las matrículas usan el id devuelto por cada INSERT.
     const date = todayPR();
-    let created = 0;
-    for (let i = 0; i < valid.length; i += 50) {
-      const part = valid.slice(i, i + 50);
-      const res = await db.batch(part.map(({ s }) => db.prepare(
-        `INSERT INTO students (first_name, last_name, birth_date, guardian_name, phone, email, notes) VALUES (?,?,?,?,?,?,?) RETURNING id`
-      ).bind(...studentParams(s))));
-      const ids = res.map((x) => x.results[0].id);
-      const extra = [];
-      ids.forEach((id, k) => {
-        const s = part[k].s;
-        if (s.guardian_name) extra.push(db.prepare('INSERT INTO guardians (student_id, name, phone) VALUES (?,?,?)').bind(id, s.guardian_name, s.phone));
-        if (courseId) extra.push(db.prepare('INSERT OR IGNORE INTO enrollments (student_id, course_id, enrolled_on) VALUES (?,?,?)').bind(id, courseId, date));
-      });
-      if (extra.length) await db.batch(extra);
-      created += ids.length;
+    const ins = await db.batch(multiInsert(db, 'INSERT INTO students (first_name, last_name, birth_date, guardian_name, phone, email, notes)', 7,
+      valid.map(({ s }) => studentParams(s)), 'RETURNING id, first_name, last_name, birth_date'));
+    const idOf = new Map(ins.flatMap((r) => r.results).map((x) => [`${x.first_name}|${x.last_name}|${x.birth_date || ''}`, x.id]));
+    const ids = valid.map(({ s }) => idOf.get(`${s.first_name}|${s.last_name}|${s.birth_date || ''}`));
+    const extra = [
+      ...multiInsert(db, 'INSERT INTO guardians (student_id, name, phone)', 3,
+        valid.map(({ s }, k) => [ids[k], s.guardian_name, s.phone]).filter((g) => g[1])),
+    ];
+    if (course) {
+      extra.push(...multiInsert(db, 'INSERT OR IGNORE INTO enrollments (student_id, course_id, enrolled_on)', 3, ids.map((id) => [id, course.id, date])));
+      // Estudiantes nuevos: la matrícula queda como deuda (no tienen saldo a favor que aplicar).
+      if (course.fee) {
+        extra.push(...multiInsert(db, 'INSERT INTO charges (student_id, kind, description, amount_cents, course_id, local_date, created_by)', 7,
+          ids.map((id) => [id, 'matricula', `Matrícula · ${course.name}`, course.fee, course.id, date, ctx.user.id])));
+      }
     }
+    if (extra.length) await db.batch(extra);
+    const created = ids.length;
     await auditStmt(ctx, 'importar_estudiantes', 'student', null, { creados: created, ...summary, curso: courseId }).run();
     return json({ dry_run: false, summary, report, created });
   });

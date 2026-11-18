@@ -33,8 +33,9 @@
       <div class="text-3xl font-semibold text-accent mt-1" x-text="App.money(d.total)"></div>
     </div>
     <div class="card p-4">
-      <div class="text-sm text-stone-500">Clases hoy</div>
-      <div class="text-3xl font-semibold text-stone-900 mt-1" x-text="d.sessions?.length ?? '–'"></div>
+      <div class="text-sm text-stone-500">Por cobrar (todas las deudas)</div>
+      <a href="/reportes" class="block text-3xl font-semibold mt-1" :class="d.counts?.due_cents ? 'text-red-700' : 'text-stone-900'" x-text="App.money(d.counts?.due_cents)"></a>
+      <div class="text-xs text-stone-500" x-text="`${d.counts?.debtors ?? 0} estudiante(s)`"></div>
     </div>
     <div class="card p-4">
       <div class="text-sm text-stone-500">Estudiantes activos</div>
@@ -97,10 +98,10 @@
       <ul class="space-y-2 text-sm">
         <template x-for="a in d.recent || []" :key="a.id">
           <li class="flex gap-2">
-            <span class="w-2 h-2 rounded-full mt-1.5 shrink-0" :class="a.method ? 'bg-emerald-500' : 'bg-amber-400'"></span>
+            <span class="w-2 h-2 rounded-full mt-1.5 shrink-0" :class="!a.due_cents ? 'bg-emerald-500' : 'bg-amber-400'"></span>
             <div class="min-w-0">
               <div class="font-medium truncate" x-text="a.student"></div>
-              <div class="text-stone-500" x-text="`${a.course_name} · ${App.fmtDateTime(a.created_at)}${a.method ? ' · ' + App.METHOD_LABEL[a.method] : ' · sin pago'}`"></div>
+              <div class="text-stone-500" x-text="`${a.course_name} · ${App.fmtDateTime(a.created_at)}${a.due_cents ? ' · debe ' + App.money(a.due_cents) : ' · pagó'}`"></div>
             </div>
           </li>
         </template>
@@ -131,7 +132,7 @@ function dash() {
       if (!confirm('¿Seguro? Se borrarán todos los estudiantes, cursos, asistencias y pagos y se cargarán los datos demo.')) return;
       this.resetting = true;
       try {
-        await App.api('POST', '/api/admin/reset-demo', {});
+        await App.resetDemo();
         App.toast('Datos demo restaurados');
         await this.load();
       } catch (e) { App.toast(e.message, 'error'); }

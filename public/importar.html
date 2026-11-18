@@ -176,8 +176,22 @@ function importer() {
     async validate() { this.validated = await this.send(true); },
     async run() {
       if (!confirm(`¿Importar ${this.validated.summary.ok} estudiante(s)?`)) return;
-      const r = await this.send(false);
-      if (r) { this.result = r; this.validated = r; App.toast(`${r.created} estudiante(s) importados`); }
+      // Se envían solo las filas válidas, en grupos de 40 (límite de consultas del plan gratis).
+      const okIdx = this.validated.report.map((x, i) => (x.status === 'ok' ? i : -1)).filter((i) => i >= 0);
+      const rows = this.mapped;
+      this.busy = true;
+      let created = 0;
+      try {
+        for (let i = 0; i < okIdx.length; i += 40) {
+          const part = okIdx.slice(i, i + 40).map((k) => rows[k]);
+          const r = await App.api('POST', '/api/students/import', { rows: part, course_id: this.courseId || null });
+          created += r.created;
+        }
+        this.result = { created, summary: this.validated.summary };
+        App.toast(`${created} estudiante(s) importados`);
+      } catch (e) {
+        App.toast(`${e.message}. Se importaron ${created} antes del error.`, 'error');
+      } finally { this.busy = false; }
     },
     template() {
       App.downloadCsv('plantilla_estudiantes.csv', [

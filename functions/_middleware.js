@@ -46,7 +46,8 @@ export async function onRequest(context) {
   if (isPage && !PUBLIC_PATHS.has(path)) {
     const user = await getSessionUser(request, env);
     if (!user) return Response.redirect(`${url.origin}/login`, 302);
-    if (/^\/usuarios(\.html)?$/.test(path) && user.role !== 'admin') return Response.redirect(`${url.origin}/`, 302);
+    // El staff solo usa Recepción (y la lista imprimible); el resto es para el admin.
+    if (user.role !== 'admin' && !/^\/(recepcion|lista)(\.html)?$/.test(path)) return Response.redirect(`${url.origin}/recepcion`, 302);
   }
 
   return withSecurityHeaders(await next());

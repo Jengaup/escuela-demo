@@ -81,10 +81,10 @@
   </section>
 
   <section class="card overflow-hidden border-amber-200" x-show="d.pending?.length">
-    <h2 class="font-semibold px-4 pt-4 pb-2 text-amber-900">Asistieron sin pagar (<span x-text="d.pending?.length"></span>)</h2>
+    <h2 class="font-semibold px-4 pt-4 pb-2 text-amber-900">Pagan después (<span x-text="d.pending?.length"></span>)</h2>
     <ul class="px-4 pb-4 text-sm space-y-1">
       <template x-for="p in d.pending || []" :key="p.id">
-        <li class="flex"><span x-text="`${p.student} · ${p.course_name}`"></span><span class="ml-auto text-stone-500" x-text="App.money(p.price_cents)"></span></li>
+        <li class="flex"><span x-text="`${p.student} · ${p.course_name}`"></span><span class="ml-auto text-stone-500" x-text="App.money(p.due_cents)"></span></li>
       </template>
     </ul>
   </section>
@@ -93,11 +93,11 @@
     <h2 class="font-semibold px-4 pt-4 pb-2">Detalle de cobros</h2>
     <div class="overflow-x-auto">
       <table class="table">
-        <thead><tr><th>Hora</th><th>Estudiante</th><th>Clase</th><th>Método</th><th>Cobró</th><th class="text-right">Monto</th></tr></thead>
+        <thead><tr><th>Hora</th><th>Estudiante</th><th>Concepto</th><th>Método</th><th>Cobró</th><th class="text-right">Monto</th></tr></thead>
         <tbody>
           <template x-for="p in d.payments || []" :key="p.id">
             <tr><td class="whitespace-nowrap" x-text="new Date(p.created_at).toLocaleTimeString('es-PR', { timeZone: 'America/Puerto_Rico', hour: 'numeric', minute: '2-digit' })"></td>
-              <td x-text="p.student"></td><td x-text="p.course_name"></td><td x-text="App.METHOD_LABEL[p.method]"></td>
+              <td x-text="p.student"></td><td class="text-sm" x-text="p.concept"></td><td x-text="App.METHOD_LABEL[p.method]"></td>
               <td x-text="p.received_by"></td><td class="text-right" x-text="App.money(p.amount_cents)"></td></tr>
           </template>
         </tbody>

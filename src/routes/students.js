@@ -4,6 +4,7 @@ import { auditStmt } from '../audit.js';
 import { requireAdmin } from '../auth.js';
 import { todayPR } from '../time.js';
 import { COURSE_LABEL_SQL } from './checkin.js';
+import { DUE_SQL, CREDIT_SQL, balance, enrollmentCharge } from '../ledger.js';
 
 export function validateStudent(src) {
   const v = new V(src);
@@ -64,6 +65,7 @@ export function register(r) {
     const { results } = await ctx.env.DB.prepare(
       `SELECT s.id, s.first_name, s.last_name, s.birth_date, s.guardian_name, s.phone, s.email, s.active,
               (s.nfc_uid IS NOT NULL) AS has_nfc,
+              ${DUE_SQL} AS due_cents, ${CREDIT_SQL} AS credit_cents,
               (SELECT group_concat(${COURSE_LABEL_SQL}, ', ') FROM enrollments e JOIN courses c ON c.id = e.course_id
                  JOIN programs p ON p.id = c.program_id JOIN levels l ON l.id = c.level_id
                 WHERE e.student_id = s.id AND e.status = 'activo') AS courses,
@@ -90,22 +92,21 @@ export function register(r) {
           WHERE e.student_id = ? ORDER BY e.status, course_name`
       ).bind(id),
       db.prepare(
-        `SELECT a.id AS attendance_id, cs.date, ${COURSE_LABEL_SQL} AS course_name, a.check_in_method,
-                pm.amount_cents, pm.method, u.name AS received_by, w.delivered AS band_delivered, w.code AS band_code
+        `SELECT a.id AS attendance_id, cs.date, ${COURSE_LABEL_SQL} AS course_name, a.check_in_method, a.created_at,
+                ch.amount_cents, ch.due_cents, w.delivered AS band_delivered, w.code AS band_code
            FROM attendance a JOIN class_sessions cs ON cs.id = a.session_id
            JOIN courses c ON c.id = cs.course_id JOIN programs p ON p.id = c.program_id JOIN levels l ON l.id = c.level_id
-           LEFT JOIN payments pm ON pm.attendance_id = a.id LEFT JOIN users u ON u.id = pm.received_by
+           LEFT JOIN charge_status ch ON ch.attendance_id = a.id
            LEFT JOIN wristbands w ON w.attendance_id = a.id
           WHERE a.student_id = ? ORDER BY cs.date DESC, c.start_time DESC LIMIT 200`
       ).bind(id),
     ]);
-    const paid = history.results.reduce((t, h) => t + (h.amount_cents || 0), 0);
     return json({
       student,
       guardians: guardians.results,
       enrollments: enrollments.results,
       history: history.results,
-      totals: { classes: history.results.length, paid_cents: paid, unpaid: history.results.filter((h) => !h.method).length },
+      totals: { classes: history.results.length, ...(await balance(db, id)) },
     });
   });
 
@@ -129,6 +130,7 @@ export function register(r) {
     }
     stmts.push(auditStmt(ctx, 'crear_estudiante', 'student', row.id, { nombre: `${s.first_name} ${s.last_name}`, cursos: courseIds }));
     await db.batch(stmts);
+    for (const cid of courseIds) await enrollmentCharge(ctx, row.id, cid); // matrícula, si el curso la cobra
     return json({ id: row.id }, 201);
   });
 

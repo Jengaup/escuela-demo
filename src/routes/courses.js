@@ -4,6 +4,7 @@ import { auditStmt } from '../audit.js';
 import { requireAdmin } from '../auth.js';
 import { todayPR } from '../time.js';
 import { COURSE_LABEL_SQL } from './checkin.js';
+import { enrollmentCharge } from '../ledger.js';
 
 function validateCourse(src) {
   const v = new V(src);
@@ -12,7 +13,9 @@ function validateCourse(src) {
     level_id: v.int('level_id', { required: true, min: 1, label: 'Nivel' }),
     start_time: v.time('start_time', { required: true, label: 'Hora de inicio' }),
     end_time: v.time('end_time', { required: true, label: 'Hora de fin' }),
-    price_cents: v.money('price', { required: true, max: 1000, label: 'Precio por clase' }),
+    price_cents: v.money('price', { required: true, max: 2000, label: 'Precio por clase' }),
+    exam_fee_cents: v.money('exam_fee', { max: 2000, label: 'Costo de examen' }) ?? 0,
+    enrollment_fee_cents: v.money('enrollment_fee', { max: 2000, label: 'Costo de matrícula' }) ?? 0,
     instructor: v.str('instructor', { required: true, max: 100, label: 'Instructor' }),
     active: src.active === undefined ? 1 : v.bool('active') ? 1 : 0,
   };
@@ -50,9 +53,9 @@ export function register(r) {
     requireAdmin(ctx);
     const c = validateCourse(await readJson(ctx.request));
     const row = await ctx.env.DB.prepare(
-      `INSERT INTO courses (program_id, level_id, days, start_time, end_time, price_cents, instructor, active)
-       VALUES (?,?,?,?,?,?,?,?) RETURNING id`
-    ).bind(c.program_id, c.level_id, c.days, c.start_time, c.end_time, c.price_cents, c.instructor, c.active).first();
+      `INSERT INTO courses (program_id, level_id, days, start_time, end_time, price_cents, exam_fee_cents, enrollment_fee_cents, instructor, active)
+       VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING id`
+    ).bind(c.program_id, c.level_id, c.days, c.start_time, c.end_time, c.price_cents, c.exam_fee_cents, c.enrollment_fee_cents, c.instructor, c.active).first();
     await auditStmt(ctx, 'crear_curso', 'course', row.id, c).run();
     return json({ id: row.id }, 201);
   });
@@ -62,8 +65,9 @@ export function register(r) {
     const id = idParam(ctx.params);
     const c = validateCourse(await readJson(ctx.request));
     const res = await ctx.env.DB.prepare(
-      `UPDATE courses SET program_id=?, level_id=?, days=?, start_time=?, end_time=?, price_cents=?, instructor=?, active=? WHERE id = ?`
-    ).bind(c.program_id, c.level_id, c.days, c.start_time, c.end_time, c.price_cents, c.instructor, c.active, id).run();
+      `UPDATE courses SET program_id=?, level_id=?, days=?, start_time=?, end_time=?, price_cents=?, exam_fee_cents=?, enrollment_fee_cents=?,
+              instructor=?, active=? WHERE id = ?`
+    ).bind(c.program_id, c.level_id, c.days, c.start_time, c.end_time, c.price_cents, c.exam_fee_cents, c.enrollment_fee_cents, c.instructor, c.active, id).run();
     if (!res.meta.changes) throw notFound('Curso no encontrado');
     await auditStmt(ctx, 'editar_curso', 'course', id, c).run();
     return json({ ok: true });
@@ -104,12 +108,15 @@ export function register(r) {
     const ok = await db.prepare('SELECT (SELECT active FROM students WHERE id = ?) AS s, (SELECT active FROM courses WHERE id = ?) AS c').bind(studentId, courseId).first();
     if (ok.s === null || ok.c === null) throw notFound('Estudiante o curso no existe');
     if (!ok.s) throw new HttpError(409, 'El estudiante está inactivo');
+    const existed = await db.prepare('SELECT id FROM enrollments WHERE student_id = ? AND course_id = ?').bind(studentId, courseId).first();
     const row = await db.prepare(
       `INSERT INTO enrollments (student_id, course_id, enrolled_on) VALUES (?,?,?)
        ON CONFLICT(student_id, course_id) DO UPDATE SET status = 'activo' RETURNING id`
     ).bind(studentId, courseId, date).first();
     await auditStmt(ctx, 'matricular', 'enrollment', row.id, { student_id: studentId, course_id: courseId }).run();
-    return json({ id: row.id }, 201);
+    // La matrícula se cobra solo la primera vez (reactivar no vuelve a cobrar).
+    const chargeId = existed ? null : await enrollmentCharge(ctx, studentId, courseId);
+    return json({ id: row.id, enrollment_charge_id: chargeId }, 201);
   });
 
   r.put('/api/enrollments/:id', async (ctx) => {

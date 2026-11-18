@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Check-in · Escuela de Artes</title>
+<title>Asistencia · Escuela de Artes</title>
 <link rel="icon" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
@@ -17,7 +17,7 @@
 <main class="max-w-6xl mx-auto p-4 space-y-4">
   <div class="flex flex-wrap items-center gap-3">
     <div>
-      <h1 class="text-2xl font-semibold text-stone-900">Check-in del día</h1>
+      <h1 class="text-2xl font-semibold text-stone-900">Asistencia del día</h1>
       <p class="text-stone-500" x-text="App.fmtDate(day.date, { weekday: 'long', day: 'numeric', month: 'long' })"></p>
     </div>
     <div class="ml-auto flex items-center gap-2 card px-3 py-2" x-show="day.band" x-cloak>
@@ -95,10 +95,10 @@
           <div class="flex flex-wrap gap-2 mt-3">
             <span class="pill" :class="st.attendance_id ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'"
               x-text="st.attendance_id ? (st.check_in_method === 'nfc' ? 'Llegó · chapita' : 'Llegó · manual') : 'No ha llegado'"></span>
-            <span class="pill" :class="st.method ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'"
-              x-text="st.method ? App.METHOD_LABEL[st.method] : 'Pago'"></span>
+            <span class="pill" :class="paid(st) ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'"
+              x-text="paid(st) ? 'Pagó' : 'Pago'"></span>
             <span class="pill" :class="st.band_delivered ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'">Banda</span>
-            <span class="pill bg-red-100 text-red-800" x-show="st.unpaid_before" x-text="`Debe ${st.unpaid_before}`"></span>
+            <span class="pill bg-red-100 text-red-800" x-show="owes(st)" x-text="`Debe ${App.money(owes(st))}`"></span>
             <span class="pill bg-amber-100 text-amber-800" x-show="!st.has_nfc">Sin chapita</span>
           </div>
         </button>
@@ -128,8 +128,10 @@
         </div>
 
         <p class="text-sm text-amber-900 bg-amber-50 rounded-lg px-3 py-2" x-show="sel.notes" x-text="'Nota: ' + sel.notes"></p>
-        <p class="text-sm text-red-800 bg-red-50 rounded-lg px-3 py-2" x-show="sel.unpaid_before"
-          x-text="`Tiene ${sel.unpaid_before} clase(s) anteriores sin pagar.`"></p>
+        <p class="text-sm text-red-800 bg-red-50 rounded-lg px-3 py-2" x-show="sel.other_due_cents"
+          x-text="`Debe ${App.money(sel.other_due_cents)} de antes.`"></p>
+        <p class="text-sm text-emerald-800 bg-emerald-50 rounded-lg px-3 py-2" x-show="sel.credit_cents"
+          x-text="`Tiene ${App.money(sel.credit_cents)} a favor.`"></p>
 
         <!-- 1. Asistencia -->
         <section class="flex items-center gap-2">
@@ -146,8 +148,7 @@
             <span class="w-7 h-7 rounded-full grid place-items-center text-sm font-bold"
               :class="!needPay || method ? 'bg-emerald-500 text-white' : 'bg-stone-900 text-white'" x-text="!needPay ? '✓' : '2'"></span>
             <h3 class="font-semibold">Pago</h3>
-            <span class="ml-auto text-sm text-emerald-700" x-show="!needPay"
-              x-text="`${App.money(sel.amount_cents)} · ${App.METHOD_LABEL[sel.method]} · ${sel.received_by_name}`"></span>
+            <span class="ml-auto text-sm text-emerald-700" x-show="!needPay" x-text="`Clase pagada (${App.money(sel.class_cents)})`"></span>
           </div>
           <template x-if="needPay">
             <div class="space-y-2">
@@ -182,7 +183,6 @@
           <a class="text-accent underline" :href="`/estudiantes?id=${sel.id}`">Ver ficha completa</a>
           <template x-if="isAdmin && sel.attendance_id">
             <div class="flex gap-4 ml-auto">
-              <button type="button" class="text-red-700 underline" x-show="sel.method" @click="undo('pago')">Anular pago</button>
               <button type="button" class="text-red-700 underline" @click="undo()">Anular asistencia</button>
             </div>
           </template>
@@ -212,7 +212,7 @@ function checkin() {
     filter: 'pendientes',
     filters: [{ key: 'pendientes', label: 'Pendientes' }, { key: 'completos', label: 'Completos' }, { key: 'todos', label: 'Todos' }],
     methods: ['efectivo', 'ath_movil', 'tarjeta'],
-    sel: null, method: null, amount: '', band: true, photo: '',
+    sel: null, method: null, amount: '', band: true, photo: '', ref: '',
     busy: false, error: '', isAdmin: false, demo: false,
     nfcSupported: NfcInput.webNfcSupported, nfcOn: false,
 
@@ -275,7 +275,9 @@ function checkin() {
       NfcInput.simulate(d.student.nfc_uid);
     },
 
-    complete(st) { return !!(st.attendance_id && st.method && st.band_delivered); },
+    paid(st) { return !!(st.charge_id && st.class_due_cents === 0); },
+    owes(st) { return (st.class_due_cents || 0) + (st.other_due_cents || 0); },
+    complete(st) { return !!(st.attendance_id && this.paid(st) && st.band_delivered); },
     count(key) {
       if (key === 'todos') return this.students.length;
       const c = this.students.filter((s) => this.complete(s)).length;
@@ -295,7 +297,7 @@ function checkin() {
       return [a !== null ? `${a} años` : null, st.guardian_name ? `Encargado: ${st.guardian_name}` : null].filter(Boolean).join(' · ');
     },
 
-    get needPay() { return !this.sel.method; },
+    get needPay() { return !this.paid(this.sel); },
     get needBand() { return !this.sel.band_delivered; },
     get canConfirm() {
       return !this.sel.attendance_id || (this.needPay && this.method) || (this.needBand && this.band);
@@ -311,7 +313,8 @@ function checkin() {
       this.method = null;
       this.band = true;
       this.photo = '';
-      this.amount = (this.current.price_cents / 100).toFixed(2);
+      this.amount = ((st.charge_id ? st.class_due_cents : this.current.price_cents) / 100).toFixed(2);
+      this.ref = App.newRef();
       if (st.has_photo) {
         const id = st.id;
         App.api('GET', `/api/students/${id}/photo`).then((r) => { if (this.sel?.id === id) this.photo = r.photo; }).catch(() => {});
@@ -322,7 +325,7 @@ function checkin() {
       this.busy = true;
       this.error = '';
       const body = { session_id: this.current.id, student_id: this.sel.id, wristband: this.needBand && this.band };
-      if (this.needPay && this.method) body.payment = { method: this.method, amount: this.amount };
+      if (this.needPay && this.method) body.payment = { method: this.method, amount: this.amount, client_ref: this.ref };
       try {
         await App.api('POST', '/api/checkin', body);
         const name = this.sel.first_name;
@@ -337,10 +340,10 @@ function checkin() {
       }
     },
     async undo(only) {
-      const what = only === 'pago' ? 'el pago' : 'la asistencia completa (pago y banda incluidos)';
+      const what = 'la asistencia (si pagó, el dinero queda como saldo a favor)';
       if (!confirm(`¿Anular ${what} de ${this.sel.first_name}? Queda registrado en la auditoría.`)) return;
       try {
-        await App.api('DELETE', `/api/checkin/${this.sel.attendance_id}${only ? '?only=pago' : ''}`);
+        await App.api('DELETE', `/api/checkin/${this.sel.attendance_id}`);
         this.close();
         await Promise.all([this.openSession(this.current.id), this.loadDay()]);
         App.toast('Anulado');

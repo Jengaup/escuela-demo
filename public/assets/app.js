@@ -2,7 +2,8 @@
 (function () {
   const NAV = [
     { href: '/', key: 'inicio', label: 'Inicio' },
-    { href: '/checkin', key: 'checkin', label: 'Check-in' },
+    { href: '/recepcion', key: 'recepcion', label: 'Recepción' },
+    { href: '/checkin', key: 'checkin', label: 'Asistencia' },
     { href: '/estudiantes', key: 'estudiantes', label: 'Estudiantes' },
     { href: '/cursos', key: 'cursos', label: 'Cursos' },
     { href: '/caja', key: 'caja', label: 'Cuadre de caja' },
@@ -34,6 +35,7 @@
     if (!res.ok) {
       const err = new Error(data.error || `Error ${res.status}`);
       err.details = data.details;
+      err.data = data;
       err.status = res.status;
       throw err;
     }
@@ -159,7 +161,19 @@
     setTimeout(() => (URL.revokeObjectURL(a.href), a.remove()), 500);
   }
 
-  window.App = { api, money, fmtDate, fmtDateTime, fmtTime, age, todayPR, addDays, daysLabel, toast, me, shell, logout, escapeHtml, downloadCsv, downloadXlsx, METHOD_LABEL, DAY_NAMES };
+  // Resetear demo en varios pasos (límite de consultas por solicitud del plan gratis).
+  async function resetDemo(onProgress) {
+    let step = 0, r;
+    do {
+      r = await api('POST', '/api/admin/reset-demo', { step });
+      onProgress?.(r.step + 1, r.steps);
+      step++;
+    } while (!r.done);
+  }
+
+  const newRef = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+
+  window.App = { api, money, fmtDate, fmtDateTime, fmtTime, age, todayPR, addDays, daysLabel, toast, me, shell, logout, escapeHtml, downloadCsv, downloadXlsx, resetDemo, newRef, METHOD_LABEL, DAY_NAMES };
 
   document.addEventListener('DOMContentLoaded', () => {
     const active = document.body.dataset.page;
