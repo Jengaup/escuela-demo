@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Usuarios · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+</head>
+<body data-page="usuarios" x-data="users()" x-init="load()">
+<div id="shell"></div>
+
+<main class="max-w-4xl mx-auto p-4 space-y-4">
+  <div class="flex items-center gap-3">
+    <h1 class="text-2xl font-semibold text-stone-900 mr-auto">Usuarios</h1>
+    <button type="button" class="btn btn-primary" @click="edit()">+ Nuevo usuario</button>
+  </div>
+  <div class="card overflow-hidden divide-y divide-stone-100">
+    <template x-for="u in list" :key="u.id">
+      <button type="button" class="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-stone-50 min-h-[64px]" @click="edit(u)">
+        <span class="w-10 h-10 rounded-full grid place-items-center font-semibold bg-stone-100 text-stone-600" x-text="u.name[0]"></span>
+        <div class="flex-1 min-w-0">
+          <div class="font-medium" :class="!u.active && 'text-stone-400 line-through'" x-text="u.name"></div>
+          <div class="text-sm text-stone-500" x-text="`@${u.username}`"></div>
+        </div>
+        <span class="pill" :class="u.role === 'admin' ? 'bg-accent-soft text-accent' : 'bg-stone-100 text-stone-600'" x-text="u.role === 'admin' ? 'Admin' : 'Staff'"></span>
+        <span class="pill bg-stone-200 text-stone-600" x-show="!u.active">Inactivo</span>
+      </button>
+    </template>
+  </div>
+  <p class="text-sm text-stone-500">Staff puede hacer check-in, cobrar, manejar estudiantes, matrículas y ver reportes. Admin además maneja cursos, usuarios, anulaciones y la auditoría.</p>
+</main>
+
+<div class="modal-backdrop" x-show="form" x-cloak @keydown.escape.window="form = null" @click.self="form = null">
+  <form class="modal p-5 space-y-4" x-show="form" role="dialog" aria-modal="true" aria-labelledby="uTitle" @submit.prevent="save()" novalidate>
+    <template x-if="form">
+      <div class="space-y-4">
+        <div class="flex"><h2 id="uTitle" class="text-xl font-semibold" x-text="form.id ? 'Editar usuario' : 'Nuevo usuario'"></h2>
+          <button type="button" class="ml-auto btn-ghost text-2xl leading-none" @click="form = null" aria-label="Cerrar">&times;</button></div>
+        <div><label class="label" for="un">Usuario</label>
+          <input id="un" class="input" x-model="form.username" :disabled="!!form.id" autocapitalize="none" autocomplete="off">
+          <p class="field-error" x-text="errors.username"></p></div>
+        <div><label class="label" for="nm">Nombre</label><input id="nm" class="input" x-model="form.name"><p class="field-error" x-text="errors.name"></p></div>
+        <div><span class="label">Rol</span>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" class="btn" :class="form.role === 'staff' ? 'btn-primary' : 'btn-secondary'" @click="form.role = 'staff'">Staff</button>
+            <button type="button" class="btn" :class="form.role === 'admin' ? 'btn-primary' : 'btn-secondary'" @click="form.role = 'admin'">Admin</button>
+          </div></div>
+        <div><label class="label" for="pw" x-text="form.id ? 'Nueva contraseña (deja en blanco para no cambiarla)' : 'Contraseña'"></label>
+          <input id="pw" class="input" type="password" x-model="form.password" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
+          <p class="field-error" x-text="errors.password"></p></div>
+        <label class="flex items-center gap-2" x-show="form.id"><input type="checkbox" class="w-5 h-5 accent-indigo-700" x-model="form.active"> Usuario activo</label>
+        <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" role="alert"></p>
+        <div class="flex gap-2 justify-end">
+          <button type="button" class="btn btn-secondary" @click="form = null">Cancelar</button>
+          <button class="btn btn-primary" :disabled="busy">Guardar</button>
+        </div>
+      </div>
+    </template>
+  </form>
+</div>
+
+<script>
+function users() {
+  return {
+    list: [], form: null, errors: {}, error: '', busy: false,
+    async load() {
+      try { this.list = (await App.api('GET', '/api/users')).users; } catch (e) { App.toast(e.message, 'error'); }
+    },
+    edit(u) {
+      this.errors = {}; this.error = '';
+      this.form = u ? { id: u.id, username: u.username, name: u.name, role: u.role, active: !!u.active, password: '' }
+                    : { id: null, username: '', name: '', role: 'staff', active: true, password: '' };
+    },
+    async save() {
+      this.busy = true; this.errors = {}; this.error = '';
+      try {
+        if (this.form.id) await App.api('PUT', `/api/users/${this.form.id}`, this.form);
+        else await App.api('POST', '/api/users', this.form);
+        App.toast('Usuario guardado'); this.form = null; this.load();
+      } catch (e) { this.errors = e.details || {}; this.error = e.message; }
+      finally { this.busy = false; }
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

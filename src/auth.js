@@ -51,15 +51,17 @@ export function requireAdmin(ctx) {
   if (ctx.user?.role !== 'admin') throw new HttpError(403, 'Solo administradores');
 }
 
-// Rate limit de login: máx. 5 fallos en 15 min por IP y por usuario.
-export const RL_MAX = 5;
+// Rate limit de login: máx. 5 fallos en 15 min por usuario y 20 por IP
+// (varias tablets de la escuela suelen compartir la misma IP pública).
 export const RL_WINDOW_MIN = 15;
+export const RL_MAX_USER = 5;
+export const RL_MAX_IP = 20;
 
-export async function isRateLimited(env, keys) {
+export async function isRateLimited(env, limits) {
   const since = new Date(Date.now() - RL_WINDOW_MIN * 60000).toISOString();
-  for (const k of keys) {
-    const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM login_attempts WHERE rl_key = ? AND created_at > ?').bind(k, since).first();
-    if (r.n >= RL_MAX) return true;
+  for (const { key, max } of limits) {
+    const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM login_attempts WHERE rl_key = ? AND created_at > ?').bind(key, since).first();
+    if (r.n >= max) return true;
   }
   return false;
 }

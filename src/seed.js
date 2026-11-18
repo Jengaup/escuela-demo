@@ -1,7 +1,7 @@
 // Datos demo ficticios. Se usa desde Node (scripts/seed.mjs → SQL) y desde el Worker (botón "Resetear datos demo").
 // Devuelve una lista de { sql, params } con ≤ 100 parámetros cada uno (límite de D1).
 import { addDays, weekday, bandOfDay } from './time.js';
-import { fakeSignature } from './png.js';
+import { demoSignature } from './png.js';
 
 export const DEMO_USERS = [
   { username: 'admin', name: 'Administración', role: 'admin', password: 'Admin#2026' },
@@ -168,7 +168,7 @@ export function buildSeed(today, opts = {}) {
       const student = students[stuId - 1];
       const t = localToIso(s.date, s.course[4], -10 + Math.floor(r() * 20));
       const user = staffPick();
-      att.push({ row: [id, s.id, stuId, fakeSignature(id * 7919), student[8] ? 'encargado' : 'estudiante', t, user], user });
+      att.push({ row: [id, s.id, stuId, demoSignature(id), student[8] ? 'encargado' : 'estudiante', t, user], user });
       // Hoy: el 3er estudiante solo firmó (sin pago ni banda).
       if (isToday && idx === 2) return;
       if (isToday || r() < 0.95) pay.push([id, s.course[6], methodPick(), user, s.date, t]);

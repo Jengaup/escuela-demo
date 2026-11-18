@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Importar · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body data-page="importar" x-data="importer()" x-init="init()">
+<div id="shell"></div>
+
+<main class="max-w-5xl mx-auto p-4 space-y-4">
+  <div class="flex flex-wrap items-center gap-3">
+    <div class="mr-auto">
+      <h1 class="text-2xl font-semibold text-stone-900">Importar estudiantes</h1>
+      <p class="text-stone-500">Desde Excel (.xlsx, .xls) o CSV. Se revisan duplicados y errores antes de guardar.</p>
+    </div>
+    <button type="button" class="btn btn-secondary" @click="template()">Descargar plantilla</button>
+  </div>
+
+  <!-- Paso 1 -->
+  <section class="card p-5 space-y-3">
+    <h2 class="font-semibold">1. Selecciona el archivo</h2>
+    <label class="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 rounded-xl p-8 cursor-pointer hover:bg-stone-50 text-center"
+      @dragover.prevent @drop.prevent="readFile($event.dataTransfer.files[0])">
+      <span class="text-stone-700 font-medium" x-text="fileName || 'Toca para escoger un archivo o arrástralo aquí'"></span>
+      <span class="text-sm text-stone-500" x-show="rows.length" x-text="`${rows.length} filas · hoja “${sheetName}”`"></span>
+      <input type="file" class="sr-only" accept=".xlsx,.xls,.csv" @change="readFile($event.target.files[0])">
+    </label>
+    <div x-show="sheets.length > 1" class="flex items-center gap-2">
+      <label class="label mb-0" for="sheet">Hoja:</label>
+      <select id="sheet" class="input w-auto" x-model="sheetName" @change="loadSheet()">
+        <template x-for="s in sheets"><option x-text="s"></option></template></select>
+    </div>
+  </section>
+
+  <!-- Paso 2 -->
+  <section class="card p-5 space-y-3" x-show="headers.length" x-cloak>
+    <h2 class="font-semibold">2. Indica qué columna corresponde a cada dato</h2>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <template x-for="f in fields" :key="f.key">
+        <div>
+          <label class="label" :for="'m_' + f.key" x-text="f.label + (f.hint ? ` (${f.hint})` : '')"></label>
+          <select class="input" :id="'m_' + f.key" x-model="map[f.key]" @change="validated = null">
+            <option value="">— No importar —</option>
+            <template x-for="(h, i) in headers" :key="i"><option :value="String(i)" x-text="h || `Columna ${i + 1}`" :selected="map[f.key] === String(i)"></option></template>
+          </select>
+        </div>
+      </template>
+    </div>
+    <p class="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2" x-show="!hasName">Asigna “Nombre” y “Apellidos”, o “Nombre completo”.</p>
+    <label class="flex items-center gap-2"><input type="checkbox" class="w-5 h-5 accent-indigo-700" x-model="hasHeader" @change="loadSheet()"> La primera fila tiene los títulos de columna</label>
+    <div>
+      <label class="label" for="course">Matricular a todos en (opcional)</label>
+      <select id="course" class="input sm:max-w-sm" x-model="courseId"><option value="">No matricular</option>
+        <template x-for="c in courses" :key="c.id"><option :value="c.id" x-text="c.name"></option></template></select>
+    </div>
+  </section>
+
+  <!-- Paso 3 -->
+  <section class="card p-5 space-y-3" x-show="headers.length && hasName" x-cloak>
+    <div class="flex flex-wrap items-center gap-2">
+      <h2 class="font-semibold mr-auto">3. Vista previa y validación</h2>
+      <button type="button" class="btn btn-secondary" @click="validate()" :disabled="busy">Validar</button>
+      <button type="button" class="btn btn-primary" @click="run()" :disabled="busy || !validated || !validated.summary.ok"
+        x-text="validated ? `Importar ${validated.summary.ok} estudiante(s)` : 'Importar'"></button>
+    </div>
+    <div class="flex flex-wrap gap-2 text-sm" x-show="validated">
+      <span class="pill bg-emerald-100 text-emerald-800" x-text="`${validated?.summary.ok} listos`"></span>
+      <span class="pill bg-amber-100 text-amber-800" x-text="`${validated?.summary.duplicados} duplicados (se omiten)`"></span>
+      <span class="pill bg-red-100 text-red-800" x-text="`${validated?.summary.errores} con errores (se omiten)`"></span>
+    </div>
+    <div class="overflow-x-auto border border-stone-200 rounded-xl">
+      <table class="table">
+        <thead><tr><th>#</th><th>Estado</th><th>Nombre</th><th>Apellidos</th><th>Nacimiento</th><th>Encargado</th><th>Teléfono</th><th>Email</th></tr></thead>
+        <tbody>
+          <template x-for="(r, i) in mapped.slice(0, previewLimit)" :key="i">
+            <tr :class="status(i)?.status === 'error' ? 'bg-red-50' : status(i)?.status === 'duplicado' ? 'bg-amber-50' : ''">
+              <td class="text-stone-400" x-text="i + 1"></td>
+              <td class="text-xs">
+                <span x-show="!status(i)" class="text-stone-400">—</span>
+                <span x-show="status(i)?.status === 'ok'" class="text-emerald-700 font-semibold">OK</span>
+                <span x-show="status(i) && status(i).status !== 'ok'" class="text-red-700" x-text="status(i)?.error"></span>
+              </td>
+              <td x-text="r.first_name || (r.full_name || '').split(' ')[0]"></td>
+              <td x-text="r.last_name || (r.full_name || '').split(' ').slice(1).join(' ')"></td>
+              <td x-text="r.birth_date"></td><td x-text="r.guardian_name"></td><td x-text="r.phone"></td><td x-text="r.email"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <button type="button" class="btn btn-ghost w-full" x-show="mapped.length > previewLimit" @click="previewLimit += 100" x-text="`Ver más (${mapped.length - previewLimit} restantes)`"></button>
+  </section>
+
+  <section class="card p-5 border-emerald-300 bg-emerald-50" x-show="result" x-cloak>
+    <h2 class="font-semibold text-emerald-900" x-text="`Se importaron ${result?.created} estudiante(s).`"></h2>
+    <p class="text-sm text-emerald-800" x-text="`Omitidos: ${result?.summary.duplicados} duplicados, ${result?.summary.errores} con errores.`"></p>
+    <a href="/estudiantes" class="btn btn-primary mt-3">Ver estudiantes</a>
+  </section>
+</main>
+
+<script>
+const SYNONYMS = {
+  first_name: ['nombre', 'nombres', 'first name', 'primer nombre'],
+  last_name: ['apellido', 'apellidos', 'last name'],
+  full_name: ['nombre completo', 'estudiante', 'alumno', 'alumna', 'participante'],
+  birth_date: ['fecha de nacimiento', 'fecha nacimiento', 'nacimiento', 'f. nacimiento', 'dob', 'cumpleanos'],
+  guardian_name: ['encargado', 'encargada', 'padre/madre', 'madre', 'padre', 'tutor', 'responsable'],
+  phone: ['telefono', 'tel', 'celular', 'cel', 'phone', 'movil'],
+  email: ['email', 'correo', 'correo electronico', 'e-mail'],
+  notes: ['notas', 'nota', 'observaciones', 'comentarios'],
+};
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+
+function importer() {
+  return {
+    fields: [
+      { key: 'first_name', label: 'Nombre' }, { key: 'last_name', label: 'Apellidos' },
+      { key: 'full_name', label: 'Nombre completo', hint: 'si viene en una sola columna' },
+      { key: 'birth_date', label: 'Fecha de nacimiento' }, { key: 'guardian_name', label: 'Encargado' },
+      { key: 'phone', label: 'Teléfono' }, { key: 'email', label: 'Email' }, { key: 'notes', label: 'Notas' },
+    ],
+    wb: null, sheets: [], sheetName: '', fileName: '', hasHeader: true, headers: [], rows: [], map: {}, courses: [], courseId: '',
+    validated: null, result: null, busy: false, previewLimit: 50,
+    init() { App.api('GET', '/api/courses').then((r) => (this.courses = r.courses)); },
+    get hasName() { return (this.map.first_name && this.map.last_name) || this.map.full_name; },
+    get mapped() {
+      return this.rows.map((r) => {
+        const o = {};
+        for (const f of this.fields) if (this.map[f.key] !== '' && this.map[f.key] !== undefined) o[f.key] = String(r[Number(this.map[f.key])] ?? '').trim();
+        return o;
+      }).filter((o) => Object.values(o).some((v) => v));
+    },
+    status(i) { return this.validated?.report[i]; },
+    async readFile(file) {
+      if (!file) return;
+      if (!window.XLSX) return App.toast('No se pudo cargar el lector de Excel. Revisa la conexión.', 'error');
+      if (file.size > 5 * 1024 * 1024) return App.toast('El archivo es muy grande (máx. 5 MB)', 'error');
+      this.fileName = file.name; this.validated = null; this.result = null;
+      try {
+        this.wb = XLSX.read(await file.arrayBuffer(), { type: 'array', codepage: 65001 });
+        this.sheets = this.wb.SheetNames;
+        this.sheetName = this.sheets[0];
+        this.loadSheet();
+      } catch { App.toast('No se pudo leer el archivo', 'error'); }
+    },
+    loadSheet() {
+      const data = XLSX.utils.sheet_to_json(this.wb.Sheets[this.sheetName], { header: 1, raw: false, defval: '', blankrows: false });
+      const width = Math.max(0, ...data.map((r) => r.length));
+      this.headers = this.hasHeader ? (data[0] || []).map(String) : Array.from({ length: width }, (_, i) => `Columna ${i + 1}`);
+      while (this.headers.length < width) this.headers.push(`Columna ${this.headers.length + 1}`);
+      this.rows = this.hasHeader ? data.slice(1) : data;
+      this.validated = null; this.previewLimit = 50;
+      // Mapeo automático por nombre de columna
+      this.map = {};
+      for (const f of this.fields) {
+        const i = this.headers.findIndex((h) => SYNONYMS[f.key].includes(norm(h)));
+        this.map[f.key] = i >= 0 ? String(i) : '';
+      }
+      if (this.map.full_name && this.map.first_name) this.map.full_name = '';
+    },
+    async send(dry) {
+      this.busy = true;
+      try {
+        const r = await App.api('POST', '/api/students/import', { rows: this.mapped, course_id: this.courseId || null, dry_run: dry });
+        return r;
+      } catch (e) { App.toast(e.message, 'error'); }
+      finally { this.busy = false; }
+    },
+    async validate() { this.validated = await this.send(true); },
+    async run() {
+      if (!confirm(`¿Importar ${this.validated.summary.ok} estudiante(s)?`)) return;
+      const r = await this.send(false);
+      if (r) { this.result = r; this.validated = r; App.toast(`${r.created} estudiante(s) importados`); }
+    },
+    template() {
+      App.downloadCsv('plantilla_estudiantes.csv', [
+        { Nombre: 'María', Apellidos: 'Rivera Colón', 'Fecha de nacimiento': '2012-05-04', Encargado: 'Ana Colón', 'Teléfono': '(787) 555-1234', Email: 'ana@ejemplo.com', Notas: '' },
+        { Nombre: 'José', Apellidos: 'Torres Díaz', 'Fecha de nacimiento': '3/15/1998', Encargado: '', 'Teléfono': '939-555-9876', Email: 'jose@ejemplo.com', Notas: 'Alergia al gluten' },
+      ]);
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

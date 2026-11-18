@@ -8,9 +8,12 @@ import * as students from './routes/students.js';
 import * as courses from './routes/courses.js';
 import * as dashboard from './routes/dashboard.js';
 import * as reports from './routes/reports.js';
+import * as importer from './routes/import.js';
+import * as admin from './routes/admin.js';
 
 const router = new Router();
-for (const mod of [auth, users, checkin, students, courses, dashboard, reports]) mod.register(router);
+// importer antes que students para que /api/students/import no choque con /api/students/:id
+for (const mod of [auth, users, checkin, importer, students, courses, dashboard, reports, admin]) mod.register(router);
 
 export async function handleApi(request, env) {
   const url = new URL(request.url);
