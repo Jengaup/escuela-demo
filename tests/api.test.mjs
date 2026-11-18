@@ -4,7 +4,6 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 
 const BASE = process.env.BASE_URL || 'http://localhost:8788';
-const SIG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 class Client {
   cookie = '';
@@ -66,7 +65,7 @@ test('seguridad: origin ajeno, páginas protegidas y roles', async () => {
   assert.equal(html.headers.get('x-frame-options'), 'DENY');
 });
 
-test('check-in: firma + pago + banda, sin cobro doble', async () => {
+test('check-in manual: asistencia + pago + banda, sin cobro doble', async () => {
   const day = (await staff.req('GET', '/api/checkin/day')).data;
   assert.ok(day.sessions.length >= 1, 'hay clases hoy');
   const sess = day.sessions[day.sessions.length - 1];
@@ -74,10 +73,10 @@ test('check-in: firma + pago + banda, sin cobro doble', async () => {
   const st = list.find((s) => !s.attendance_id);
   assert.ok(st, 'hay un estudiante pendiente');
 
-  assert.equal((await staff.req('POST', '/api/checkin', { session_id: sess.id, student_id: st.id, wristband: true })).status, 400, 'sin firma');
-  assert.equal((await staff.req('POST', '/api/checkin', { session_id: sess.id, student_id: st.id, signature: 'data:text/html,x', signed_by: 'encargado' })).status, 400);
+  const bad = await staff.req('POST', '/api/checkin', { session_id: sess.id, student_id: st.id, payment: { method: 'bitcoin', amount: 1 } });
+  assert.equal(bad.status, 400);
   const ok = await staff.req('POST', '/api/checkin', {
-    session_id: sess.id, student_id: st.id, signature: SIG, signed_by: 'encargado',
+    session_id: sess.id, student_id: st.id,
     payment: { method: 'ath_movil', amount: (sess.price_cents / 100).toFixed(2) }, wristband: true,
   });
   assert.equal(ok.status, 200);
@@ -85,6 +84,7 @@ test('check-in: firma + pago + banda, sin cobro doble', async () => {
   assert.equal(again.status, 409);
 
   const after = (await staff.req('GET', `/api/checkin/session/${sess.id}`)).data.students.find((s) => s.id === st.id);
+  assert.equal(after.check_in_method, 'manual');
   assert.equal(after.method, 'ath_movil');
   assert.equal(after.amount_cents, sess.price_cents);
   assert.equal(after.band_delivered, 1);
@@ -96,6 +96,61 @@ test('check-in: firma + pago + banda, sin cobro doble', async () => {
   // Solo admin anula
   assert.equal((await staff.req('DELETE', `/api/checkin/${ok.data.attendance_id}?only=pago`)).status, 403);
   assert.equal((await admin.req('DELETE', `/api/checkin/${ok.data.attendance_id}?only=pago`)).status, 200);
+});
+
+test('chapita NFC: asignar, pasar, repetir, cambiar y quitar', async () => {
+  const day = (await staff.req('GET', '/api/checkin/day')).data;
+  const sess = day.sessions[day.sessions.length - 1];
+  const st = (await staff.req('GET', `/api/checkin/session/${sess.id}`)).data.students.find((s) => !s.attendance_id);
+  assert.ok(st);
+  const uid = '04:AB:CD:' + String(Date.now() % 1e6).padStart(6, '0').replace(/(..)(..)(..)/, '$1:$2:$3');
+  const clean = uid.replace(/:/g, '');
+
+  assert.equal((await staff.req('POST', '/api/checkin/tap', { uid: 'zz' })).status, 400);
+  assert.equal((await staff.req('POST', '/api/checkin/tap', { uid })).status, 404, 'chapita sin asignar');
+  assert.equal((await staff.req('POST', `/api/students/${st.id}/nfc`, { uid })).status, 200);
+  const det = (await staff.req('GET', `/api/students/${st.id}`)).data.student;
+  assert.equal(det.nfc_uid, clean, 'se guarda normalizada');
+
+  // Mismo UID escrito por un lector USB (sin separadores, minúsculas)
+  const tap = await staff.req('POST', '/api/checkin/tap', { uid: clean.toLowerCase() });
+  assert.equal(tap.status, 200);
+  assert.equal(tap.data.student_id, st.id);
+  // Si tiene varias clases hoy, se escoge la que está en curso o la más cercana
+  assert.ok(tap.data.sessions.some((x) => x.id === tap.data.session_id));
+  if (tap.data.sessions.length === 1) assert.equal(tap.data.session_id, sess.id);
+  assert.equal(tap.data.already, false);
+  const sid = tap.data.session_id;
+  const row = (await staff.req('GET', `/api/checkin/session/${sid}`)).data.students.find((s) => s.id === st.id);
+  assert.equal(row.check_in_method, 'nfc');
+  assert.equal(row.method, null, 'el pago se registra aparte, al confirmar');
+  assert.equal((await staff.req('POST', '/api/checkin/tap', { uid })).data.already, true);
+
+  // Cobro inmediato después de la chapita
+  const pay = await staff.req('POST', '/api/checkin', { session_id: sid, student_id: st.id, payment: { method: 'efectivo', amount: '25' }, wristband: true });
+  assert.equal(pay.status, 200);
+
+  // Otro estudiante no puede usar la misma chapita sin confirmar
+  const other = 1 === st.id ? 2 : 1;
+  const conflict = await staff.req('POST', `/api/students/${other}/nfc`, { uid });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.data.owner.id, st.id);
+  assert.equal((await staff.req('POST', `/api/students/${other}/nfc`, { uid, force: true })).status, 200);
+  assert.equal((await staff.req('GET', `/api/students/${st.id}`)).data.student.nfc_uid, null, 'se le quitó al anterior');
+
+  assert.equal((await staff.req('DELETE', `/api/students/${other}/nfc`)).status, 200);
+  assert.equal((await staff.req('POST', '/api/checkin/tap', { uid })).status, 404, 'chapita quitada ya no funciona');
+});
+
+test('foto del estudiante', async () => {
+  const jpg = 'data:image/jpeg;base64,' + 'A'.repeat(4000);
+  assert.equal((await staff.req('PUT', '/api/students/3/photo', { photo: 'data:text/html;base64,AAAA' })).status, 400);
+  assert.equal((await staff.req('PUT', '/api/students/3/photo', { photo: 'data:image/jpeg;base64,' + 'A'.repeat(400 * 1024) })).status, 413);
+  assert.equal((await staff.req('PUT', '/api/students/3/photo', { photo: jpg })).status, 200);
+  assert.equal((await staff.req('GET', '/api/students/3')).data.student.has_photo, 1);
+  assert.equal((await staff.req('GET', '/api/students/3/photo')).data.photo, jpg);
+  assert.equal((await staff.req('DELETE', '/api/students/3/photo')).status, 200);
+  assert.equal((await staff.req('GET', '/api/students/3/photo')).status, 404);
 });
 
 test('estudiantes: validación, CRUD, duplicados e historial', async () => {

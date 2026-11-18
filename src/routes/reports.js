@@ -68,7 +68,7 @@ export function register(r) {
     const [attendance, payments, summary] = await db.batch([
       db.prepare(
         `SELECT cs.date, ${COURSE_LABEL_SQL} AS course_name, s.id AS student_id, s.first_name || ' ' || s.last_name AS student,
-                a.signed_by, a.signed_at, pm.amount_cents, pm.method, u.name AS received_by, w.delivered AS band, w.code AS band_code
+                a.check_in_method, pm.amount_cents, pm.method, u.name AS received_by, w.delivered AS band, w.code AS band_code
            FROM attendance a ${JOINS}
            LEFT JOIN payments pm ON pm.attendance_id = a.id LEFT JOIN users u ON u.id = pm.received_by
            LEFT JOIN wristbands w ON w.attendance_id = a.id

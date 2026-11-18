@@ -1,11 +1,10 @@
 import { json, readJson, badRequest, notFound, HttpError } from '../http.js';
-import { V, idParam } from '../validate.js';
+import { V, idParam, normalizeUid } from '../validate.js';
 import { auditStmt } from '../audit.js';
 import { requireAdmin } from '../auth.js';
 import { todayPR, weekday, bandOfDay, nowIso } from '../time.js';
 
 export const METHODS = ['efectivo', 'ath_movil', 'tarjeta'];
-const MAX_SIGNATURE = 300 * 1024;
 
 export const COURSE_LABEL_SQL = `(p.name || ' ' || l.name)`;
 
@@ -19,8 +18,18 @@ export async function ensureSessions(env, date) {
   }
 }
 
-function validSignature(sig) {
-  return typeof sig === 'string' && sig.length <= MAX_SIGNATURE && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(sig);
+// Hora local de PR "HH:MM"
+function nowHHMM() {
+  return new Date(Date.now() - 4 * 3600 * 1000).toISOString().slice(11, 16);
+}
+const toMin = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+// Si el estudiante tiene varias clases hoy, escoge la que está en curso o la más cercana.
+export function pickSession(sessions, hhmm) {
+  const now = toMin(hhmm);
+  const current = sessions.find((s) => now >= toMin(s.start_time) - 60 && now <= toMin(s.end_time));
+  if (current) return current;
+  return [...sessions].sort((a, b) => Math.abs(toMin(a.start_time) - now) - Math.abs(toMin(b.start_time) - now))[0];
 }
 
 async function loadSession(env, id) {
@@ -44,7 +53,7 @@ export function register(r) {
       `SELECT cs.id, cs.date, c.id AS course_id, ${COURSE_LABEL_SQL} AS course_name, p.name AS program, l.name AS level,
               c.start_time, c.end_time, c.price_cents, c.instructor,
               (SELECT COUNT(*) FROM enrollments e WHERE e.course_id = c.id AND e.status = 'activo') AS enrolled,
-              (SELECT COUNT(*) FROM attendance a WHERE a.session_id = cs.id) AS signed,
+              (SELECT COUNT(*) FROM attendance a WHERE a.session_id = cs.id) AS present,
               (SELECT COUNT(*) FROM attendance a JOIN payments pm ON pm.attendance_id = a.id WHERE a.session_id = cs.id) AS paid,
               (SELECT COUNT(*) FROM attendance a JOIN wristbands w ON w.attendance_id = a.id AND w.delivered = 1 WHERE a.session_id = cs.id) AS banded
          FROM class_sessions cs JOIN courses c ON c.id = cs.course_id
@@ -61,7 +70,11 @@ export function register(r) {
     if (!session) throw notFound('Clase no encontrada');
     const { results } = await ctx.env.DB.prepare(
       `SELECT s.id, s.first_name, s.last_name, s.birth_date, s.guardian_name, s.phone, s.notes,
-              a.id AS attendance_id, a.signed_by, a.signed_at,
+              (s.nfc_uid IS NOT NULL) AS has_nfc,
+              EXISTS (SELECT 1 FROM student_photos sp WHERE sp.student_id = s.id) AS has_photo,
+              (SELECT COUNT(*) FROM attendance a2 LEFT JOIN payments p2 ON p2.attendance_id = a2.id
+                WHERE a2.student_id = s.id AND p2.id IS NULL AND a2.session_id <> ?1) AS unpaid_before,
+              a.id AS attendance_id, a.check_in_method, a.created_at AS checked_in_at,
               pm.amount_cents, pm.method, ru.name AS received_by_name,
               w.delivered AS band_delivered, w.code AS band_code
          FROM students s
@@ -76,21 +89,46 @@ export function register(r) {
     return json({ session: { ...session, band: bandOfDay(session.date) }, students: results });
   });
 
-  // Firma de una asistencia (imagen).
-  r.get('/api/attendance/:id/signature', async (ctx) => {
-    const id = idParam(ctx.params);
-    const row = await ctx.env.DB.prepare('SELECT signature FROM attendance WHERE id = ?').bind(id).first();
-    if (!row?.signature) throw notFound('Sin firma');
-    return json({ signature: row.signature });
+  // Chapita NFC: identifica al estudiante, escoge su clase de hoy y marca la asistencia.
+  r.post('/api/checkin/tap', async (ctx) => {
+    const body = await readJson(ctx.request, 4096);
+    const uid = normalizeUid(body.uid);
+    if (!uid) throw badRequest('Lectura de chapita inválida. Intenta de nuevo.');
+    const db = ctx.env.DB;
+    const student = await db.prepare('SELECT id, first_name, last_name, active FROM students WHERE nfc_uid = ?').bind(uid).first();
+    if (!student) throw new HttpError(404, 'Esta chapita no está asignada a ningún estudiante');
+    const name = `${student.first_name} ${student.last_name}`;
+    if (!student.active) throw new HttpError(409, `${name} está inactivo`);
+
+    const today = todayPR();
+    await ensureSessions(ctx.env, today);
+    const { results: sessions } = await db.prepare(
+      `SELECT cs.id, ${COURSE_LABEL_SQL} AS course_name, c.start_time, c.end_time
+         FROM class_sessions cs JOIN courses c ON c.id = cs.course_id
+         JOIN programs p ON p.id = c.program_id JOIN levels l ON l.id = c.level_id
+         JOIN enrollments e ON e.course_id = c.id AND e.student_id = ? AND e.status = 'activo'
+        WHERE cs.date = ? ORDER BY c.start_time`
+    ).bind(student.id, today).all();
+    if (!sessions.length) {
+      return json({ error: `${name} no tiene clase hoy`, student_id: student.id }, 409);
+    }
+    const wanted = Number(body.session_id);
+    const session = sessions.find((s) => s.id === wanted) || pickSession(sessions, nowHHMM());
+
+    const created = await db.prepare(
+      `INSERT INTO attendance (session_id, student_id, check_in_method, recorded_by) VALUES (?,?, 'nfc', ?)
+       ON CONFLICT(session_id, student_id) DO NOTHING RETURNING id`
+    ).bind(session.id, student.id, ctx.user.id).first();
+    if (created) await auditStmt(ctx, 'checkin', 'attendance', created.id, { estudiante: name, clase: session.course_name, fecha: today, pasos: ['chapita'] }).run();
+    return json({ student_id: student.id, session_id: session.id, already: !created, sessions });
   });
 
-  // Check-in: firma + pago + banda en una sola llamada. Idempotente: completa lo que falte.
+  // Check-in: asistencia + pago + banda en una sola llamada. Idempotente: completa lo que falte.
   r.post('/api/checkin', async (ctx) => {
-    const body = await readJson(ctx.request, 512 * 1024);
+    const body = await readJson(ctx.request, 8192);
     const v = new V(body);
     const sessionId = v.int('session_id', { required: true, min: 1, label: 'Clase' });
     const studentId = v.int('student_id', { required: true, min: 1, label: 'Estudiante' });
-    const signedBy = v.oneOf('signed_by', ['encargado', 'estudiante'], { label: 'Quién firma' });
     let wantBand = v.bool('wristband');
     let pay = null;
     if (body.payment) {
@@ -100,9 +138,6 @@ export function register(r) {
         amount: pv.money('amount', { required: true, max: 5000, label: 'Monto' }),
       };
       pv.done();
-    }
-    if (body.signature !== undefined && body.signature !== null && !validSignature(body.signature)) {
-      v.fail('signature', 'Firma inválida o demasiado grande');
     }
     v.done();
 
@@ -122,14 +157,12 @@ export function register(r) {
     const done = [];
 
     if (!att) {
-      if (!body.signature) throw badRequest('Falta la firma');
-      if (!signedBy) throw badRequest('Indica quién firma');
       att = await db.prepare(
-        `INSERT INTO attendance (session_id, student_id, signature, signed_by, signed_at, recorded_by)
-         VALUES (?,?,?,?,?,?) ON CONFLICT(session_id, student_id) DO NOTHING RETURNING id`
-      ).bind(sessionId, studentId, body.signature, signedBy, now, ctx.user.id).first();
+        `INSERT INTO attendance (session_id, student_id, check_in_method, recorded_by)
+         VALUES (?,?, 'manual', ?) ON CONFLICT(session_id, student_id) DO NOTHING RETURNING id`
+      ).bind(sessionId, studentId, ctx.user.id).first();
       if (!att) throw new HttpError(409, 'Otro usuario acaba de registrar esta asistencia. Refresca la lista.');
-      done.push('firma');
+      done.push('asistencia');
     }
 
     const existing = done.length ? {} : await db.prepare(

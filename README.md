@@ -16,9 +16,10 @@ Cambia estas contraseñas antes de usar la app con datos reales (pantalla **Usua
 
 ## Qué incluye
 
-- **Check-in del día**: escoges la clase, tocas al estudiante, firma en pantalla (estudiante o encargado), escoges el método de pago (monto precargado) y confirmas la entrega de la banda. Son tres toques. Cada estudiante muestra si firmó, pagó y recibió banda, y se pone verde cuando completa todo. Si el pago o la banda quedan pendientes, se pueden completar después.
+- **Check-in del día con chapita NFC**: el estudiante pasa su chapita, la app marca la asistencia en su clase de hoy y abre su ficha con foto, encargado, notas y clases que debe. El staff toca el método de pago (monto precargado) y confirma. La banda queda marcada. Son 2 toques. Si alguien olvida la chapita, el staff lo toca en la lista y lo marca a mano. Cada estudiante muestra si llegó, si pagó y si recibió banda, y se pone verde cuando completa todo. Si no puede pagar en el momento, se usa **Cobrar después**.
+- **Lista imprimible por clase**: hoja con los matriculados y columnas de hora, firma y pago, para la administración que quiere mantener la firma en papel. Se imprime desde el check-in (con la fecha de esa clase) o desde Cursos (con la fecha en blanco).
 - **Inicio**: clases de hoy, asistentes, total cobrado por método y cobros de los últimos 7 días.
-- **Estudiantes**: crear, editar, buscar, desactivar, encargados, matrículas e historial de asistencia y pagos (con la firma de cada día).
+- **Estudiantes**: crear, editar, buscar, desactivar, encargados, matrículas e historial de asistencia y pagos. Cada ficha tiene **foto** (se toma con la cámara de la tablet) y botones para **asignar, cambiar o quitar la chapita**.
 - **Cursos y matrículas**: programa, nivel, días, horario, precio por clase e instructor. Matricular y dar de baja.
 - **Cuadre de caja**: totales del día por método y por staff, detalle de cada cobro, quién asistió sin pagar y comparación con el efectivo contado. Se puede imprimir con líneas de firma.
 - **Reportes**: asistencia y pagos por rango de fechas y por curso. Exporta a CSV o Excel (.xlsx con varias hojas). El admin ve además la bitácora de auditoría.
@@ -29,6 +30,19 @@ Cambia estas contraseñas antes de usar la app con datos reales (pantalla **Usua
 
 - **Staff**: check-in, cobros, estudiantes, matrículas, cuadre, reportes e importación.
 - **Admin**: todo lo anterior, más cursos, usuarios, anular pagos o check-ins, borrar registros, auditoría y reseteo del demo.
+
+## Lectores de chapitas NFC
+
+La app funciona con dos tipos de lector:
+
+| Tablet | Qué se necesita | Cómo se usa |
+|---|---|---|
+| **Android con NFC** (en Chrome) | Nada adicional | En Check-in se toca **Activar lector NFC** una vez y se acerca la chapita a la parte de atrás de la tablet. |
+| **iPad** (no tiene NFC) o computadora | Lector NFC USB que funcione **"como teclado"** (keyboard emulation / HID), compatible con chapitas de 13.56 MHz (NTAG/MIFARE) | Se conecta y listo. La chapita se pasa por encima del lector. |
+
+En el lector USB conviene que esté configurado para escribir el número y un **Enter** al final, que es lo normal en estos lectores. La app distingue la chapita de una persona escribiendo por la velocidad.
+
+Hay que usar el mismo tipo de lector para asignar las chapitas y para el check-in. Algunos lectores USB escriben el número en otro formato que el NFC de Android, así que una chapita asignada con un tipo de lector puede no reconocerse con el otro.
 
 ## Seguridad
 
@@ -56,7 +70,7 @@ escuela-demo/
 │   ├── seed.js                # Datos demo (se usa desde Node y desde el botón de reset)
 │   └── routes/                # auth, users, checkin, students, courses, import, dashboard, reports, admin
 ├── public/                    # HTML + Tailwind (CDN) + Alpine.js
-│   └── assets/                # app.js, app.css, signature.js
+│   └── assets/                # app.js, app.css, nfc.js
 ├── scripts/
 │   ├── seed.mjs               # Genera seed/seed.sql
 │   └── create-user.mjs        # Crea un usuario sin datos demo
@@ -70,6 +84,8 @@ Detalles del modelo de datos:
 - El dinero se guarda en centavos (enteros) para evitar errores de redondeo.
 - Las fechas de clase usan la hora de Puerto Rico (AST, UTC-4, sin cambio de horario).
 - Las sesiones de clase de hoy se crean solas según los días de cada curso.
+- Cada chapita tiene un número único de fábrica (UID). No hay que programarla: se asigna pasándola por el lector desde la ficha del estudiante. Una chapita solo puede pertenecer a un estudiante; si se pasa a otro, la app pide confirmación y se la quita al anterior.
+- Si un estudiante tiene varias clases el mismo día, la chapita lo marca en la que está en curso o en la más cercana a la hora actual.
 - Un pago por asistencia y una banda por asistencia (restricción `UNIQUE`). Si dos tablets confirman al mismo tiempo, no se cobra doble.
 - El color de la banda rota cada día (ej. `Azul-1118`), así no sirve la banda de ayer.
 
@@ -91,7 +107,7 @@ npm run dev
 
 Abre http://localhost:8788 y entra con `admin` / `Admin#2026`.
 
-`setup:local` aplica las migraciones a una base D1 local (en `.wrangler/`) y carga los datos demo: 30 estudiantes, 5 cursos y 2 semanas de clases con asistencia, firmas, pagos y bandas. Los horarios se acomodan para que siempre haya clases "hoy".
+`setup:local` aplica las migraciones a una base D1 local (en `.wrangler/`) y carga los datos demo: 30 estudiantes, 5 cursos y 2 semanas de clases con asistencia, pagos y bandas. Todos tienen chapita de prueba menos 2 (para probar **Asignar chapita**). En modo demo, el check-in tiene un botón **Simular chapita** para probar sin lector. Los horarios se acomodan para que siempre haya clases "hoy".
 
 ### Pruebas
 
@@ -107,7 +123,17 @@ npm run test:ui
 
 `npm test` corre las pruebas de la API (login, rate limit, permisos, check-in completo, cobro doble, validaciones, reportes e importación). Empieza reseteando los datos demo. `npm run test:ui` abre Chromium con Playwright, recorre las 8 pantallas en iPad y iPhone, hace un check-in completo y falla si hay errores de JavaScript o scroll horizontal. Las capturas quedan en `tests/screenshots/`. Necesita Playwright instalado (`npm i -D playwright` y `npx playwright install chromium`).
 
-## Deploy en Cloudflare
+## Deploy desde el navegador (sin instalar nada)
+
+1. **Base de datos:** en el dashboard de Cloudflare ve a **Storage & Databases → D1 SQL Database → Create Database**, con el nombre `escuela-demo`. Copia el **Database ID**.
+2. **Tablas y usuarios:** abre la pestaña **Console** de la base. Pega todo el contenido de [`setup/consola-d1.sql`](setup/consola-d1.sql) y presiona **Execute**. Ese archivo crea las tablas y los 3 usuarios demo. Se regenera con `npm run console-sql` si cambian las migraciones.
+3. **ID en la configuración:** en GitHub edita `wrangler.toml` y pon tu ID en `database_id`.
+4. **Pages:** ve a **Workers & Pages → Create → Pages → Connect to Git** y escoge este repositorio. Usa como rama de producción la rama del código, framework `None`, sin build command y con output directory `public`. Presiona **Save and Deploy**.
+5. **Datos demo:** entra con `admin` y presiona **Resetear datos demo** en Inicio.
+
+Cada cambio que se suba a la rama se publica solo.
+
+## Deploy con Wrangler (desde una computadora)
 
 ### 1. Inicia sesión en Wrangler
 
@@ -180,12 +206,12 @@ D1 también tiene **Time Travel**, que permite restaurar la base a cualquier mom
 
 ## Límites del plan gratis
 
-- **D1**: 5 GB de almacenamiento, 5 millones de lecturas y 100,000 escrituras al día. Cada firma ocupa entre 5 y 20 KB, así que aguanta cientos de miles de check-ins.
+- **D1**: 5 GB de almacenamiento, 5 millones de lecturas y 100,000 escrituras al día. Cada foto ocupa unos 30 a 50 KB, así que caben miles de estudiantes con foto.
 - **Workers/Pages Functions**: 100,000 solicitudes al día y 10 ms de CPU por solicitud. El login usa PBKDF2 con 100,000 iteraciones, que está cerca de ese límite. Cloudflare suele permitir picos ocasionales, pero si alguna vez ves el error 1102 al entrar, tienes dos opciones: el plan Workers Paid ($5 al mes, 30 segundos de CPU) o bajar las iteraciones en `src/crypto.js`. Cada usuario guarda sus propias iteraciones, así que los hashes viejos siguen funcionando.
 
 ## Tecnología
 
 - HTML + [Tailwind CSS v4](https://tailwindcss.com) (CDN) + [Alpine.js](https://alpinejs.dev) (CDN). No hay paso de build.
 - [SheetJS](https://sheetjs.com) para leer y exportar Excel, cargado desde CDN solo en Importar y Reportes.
-- Firma con `<canvas>` y pointer events (dedo, stylus o mouse), exportada a PNG en base64.
+- Chapitas NFC con Web NFC (Android) o con lector USB tipo teclado (`public/assets/nfc.js`).
 - API en JavaScript sobre Pages Functions con un router pequeño propio, sin dependencias de runtime.

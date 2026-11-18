@@ -13,7 +13,8 @@
     "test": "node --test tests/api.test.mjs",
     "test:ui": "node tests/ui-smoke.mjs",
     "deploy": "wrangler pages deploy public --branch main",
-    "user:create": "node scripts/create-user.mjs"
+    "user:create": "node scripts/create-user.mjs",
+    "console-sql": "node scripts/console-sql.mjs"
   },
   "repository": {
     "type": "git",

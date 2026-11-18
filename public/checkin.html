@@ -9,9 +9,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
-<script src="/assets/signature.js"></script>
+<script src="/assets/nfc.js"></script>
 </head>
-<body data-page="checkin" x-data="checkin()" x-init="init()">
+<body data-page="checkin" x-data="checkin()">
 <div id="shell"></div>
 
 <main class="max-w-6xl mx-auto p-4 space-y-4">
@@ -26,6 +26,20 @@
     </div>
   </div>
 
+  <!-- Lector de chapitas -->
+  <section class="card px-4 py-3 flex flex-wrap items-center gap-3" aria-live="polite">
+    <span class="relative flex w-3 h-3">
+      <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" x-show="readerReady"></span>
+      <span class="relative inline-flex rounded-full w-3 h-3" :class="readerReady ? 'bg-emerald-500' : 'bg-stone-300'"></span>
+    </span>
+    <div class="flex-1 min-w-[12rem]">
+      <div class="font-medium text-stone-900" x-text="readerReady ? 'Listo: pasa la chapita' : 'Lector NFC apagado'"></div>
+      <div class="text-sm text-stone-500" x-text="readerHint"></div>
+    </div>
+    <button type="button" class="btn btn-primary" x-show="nfcSupported && !nfcOn" @click="startNfc()">Activar lector NFC</button>
+    <button type="button" class="btn btn-secondary text-sm" x-show="demo" x-cloak @click="simulate()">Simular chapita</button>
+  </section>
+
   <!-- Clases de hoy -->
   <section aria-label="Clases de hoy">
     <div class="flex gap-3 overflow-x-auto pb-1 scrollbar-none">
@@ -39,7 +53,7 @@
           <div class="mt-3 h-2 bg-stone-200 rounded-full overflow-hidden">
             <div class="h-full bg-emerald-500" :style="`width:${s.enrolled ? Math.min(100, s.banded / s.enrolled * 100) : 0}%`"></div>
           </div>
-          <div class="text-xs text-stone-500 mt-1"><span x-text="s.banded"></span> de <span x-text="s.enrolled"></span> completos</div>
+          <div class="text-xs text-stone-500 mt-1" x-text="`${s.present} llegaron · ${s.banded} de ${s.enrolled} completos`"></div>
         </button>
       </template>
       <div class="card p-6 text-stone-500 w-full text-center" x-show="loaded && !day.sessions.length" x-cloak>
@@ -59,7 +73,7 @@
             x-text="`${f.label} (${count(f.key)})`"></button>
         </template>
       </div>
-      <span class="ml-auto text-sm text-stone-500">Precio por clase: <strong class="text-stone-900" x-text="App.money(current?.price_cents)"></strong></span>
+      <a class="btn btn-secondary ml-auto" :href="`/lista?s=${current?.id}`" target="_blank" rel="noopener">Imprimir lista</a>
     </div>
 
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -78,15 +92,14 @@
               <div class="text-sm text-stone-500 truncate" x-text="subtitle(st)"></div>
             </div>
           </div>
-          <div class="flex gap-2 mt-3">
-            <span class="pill" :class="st.attendance_id ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15.2 5.2l3.6 3.6M4 20l4.5-1 10.3-10.3a2.5 2.5 0 00-3.5-3.5L5 15.5 4 20z"/></svg>
-              <span x-text="st.attendance_id ? 'Firmó' : 'Firma'"></span></span>
-            <span class="pill" :class="st.method ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'">
-              <span>$</span><span x-text="st.method ? App.METHOD_LABEL[st.method] : 'Pago'"></span></span>
-            <span class="pill" :class="st.band_delivered ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>
-              <span x-text="st.band_delivered ? 'Banda' : 'Banda'"></span></span>
+          <div class="flex flex-wrap gap-2 mt-3">
+            <span class="pill" :class="st.attendance_id ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'"
+              x-text="st.attendance_id ? (st.check_in_method === 'nfc' ? 'Llegó · chapita' : 'Llegó · manual') : 'No ha llegado'"></span>
+            <span class="pill" :class="st.method ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'"
+              x-text="st.method ? App.METHOD_LABEL[st.method] : 'Pago'"></span>
+            <span class="pill" :class="st.band_delivered ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'">Banda</span>
+            <span class="pill bg-red-100 text-red-800" x-show="st.unpaid_before" x-text="`Debe ${st.unpaid_before}`"></span>
+            <span class="pill bg-amber-100 text-amber-800" x-show="!st.has_nfc">Sin chapita</span>
           </div>
         </button>
       </template>
@@ -95,54 +108,43 @@
   </section>
 </main>
 
-<!-- Modal de check-in -->
+<!-- Ficha del estudiante + cobro -->
 <div class="modal-backdrop" x-show="sel" x-cloak @keydown.escape.window="close()" @click.self="close()">
   <div class="modal p-5 sm:p-6 space-y-5" role="dialog" aria-modal="true" aria-labelledby="mTitle" x-show="sel" x-transition.opacity>
     <template x-if="sel">
       <div class="space-y-5">
-        <div class="flex items-start gap-3">
-          <div class="min-w-0">
-            <h2 id="mTitle" class="text-xl font-semibold text-stone-900" x-text="`${sel.first_name} ${sel.last_name}`"></h2>
-            <p class="text-sm text-stone-500" x-text="`${current.course_name} · ${subtitle(sel)}`"></p>
-            <p class="text-sm text-amber-700 mt-1" x-show="sel.notes" x-text="'Nota: ' + sel.notes"></p>
+        <div class="flex items-start gap-4">
+          <div class="w-24 h-24 sm:w-28 sm:h-28 shrink-0 rounded-2xl overflow-hidden bg-stone-100 grid place-items-center text-3xl font-semibold text-stone-500">
+            <img x-show="photo" :src="photo" alt="" class="w-full h-full object-cover">
+            <span x-show="!photo" x-text="sel.first_name[0] + sel.last_name[0]"></span>
           </div>
-          <button type="button" class="ml-auto btn-ghost text-2xl leading-none" @click="close()" aria-label="Cerrar">&times;</button>
+          <div class="min-w-0 flex-1">
+            <h2 id="mTitle" class="text-2xl font-semibold text-stone-900 leading-tight" x-text="`${sel.first_name} ${sel.last_name}`"></h2>
+            <p class="text-stone-500" x-text="current.course_name"></p>
+            <p class="text-sm text-stone-500" x-text="subtitle(sel)"></p>
+            <p class="text-sm text-stone-500" x-show="sel.phone" x-text="sel.phone"></p>
+          </div>
+          <button type="button" class="btn-ghost text-2xl leading-none" @click="close()" aria-label="Cerrar">&times;</button>
         </div>
 
-        <!-- 1. Firma -->
-        <section class="space-y-2">
-          <div class="flex items-center gap-2">
-            <span class="w-7 h-7 rounded-full grid place-items-center text-sm font-bold"
-              :class="!needSign || hasSig ? 'bg-emerald-500 text-white' : 'bg-stone-900 text-white'">1</span>
-            <h3 class="font-semibold">Firma</h3>
-            <span class="ml-auto text-sm text-emerald-700" x-show="!needSign"
-              x-text="`Firmó ${sel.signed_by === 'encargado' ? 'el encargado' : 'el estudiante'} · ${App.fmtDateTime(sel.signed_at)}`"></span>
-          </div>
-          <template x-if="needSign">
-            <div class="space-y-2">
-              <div class="grid grid-cols-2 gap-2">
-                <button type="button" class="btn" :class="signer === 'estudiante' ? 'btn-primary' : 'btn-secondary'" @click="signer = 'estudiante'">Estudiante</button>
-                <button type="button" class="btn" :class="signer === 'encargado' ? 'btn-primary' : 'btn-secondary'" @click="signer = 'encargado'">
-                  <span class="truncate" x-text="sel.guardian_name ? `Encargado: ${sel.guardian_name.split(' ')[0]}` : 'Encargado'"></span></button>
-              </div>
-              <div class="relative">
-                <canvas x-ref="sig" class="sig-canvas" aria-label="Área de firma"></canvas>
-                <span class="absolute inset-0 grid place-items-center text-stone-400 pointer-events-none" x-show="!hasSig">Firme aquí con el dedo</span>
-                <button type="button" class="absolute top-2 right-2 btn-ghost text-sm bg-white/80" @click="pad.clear()" x-show="hasSig">Borrar</button>
-              </div>
-            </div>
-          </template>
-          <template x-if="!needSign">
-            <button type="button" class="text-sm text-accent underline" @click="showSignature()" x-show="!sigImg">Ver firma</button>
-          </template>
-          <img :src="sigImg" x-show="sigImg" class="border rounded-lg max-h-32" alt="Firma registrada">
+        <p class="text-sm text-amber-900 bg-amber-50 rounded-lg px-3 py-2" x-show="sel.notes" x-text="'Nota: ' + sel.notes"></p>
+        <p class="text-sm text-red-800 bg-red-50 rounded-lg px-3 py-2" x-show="sel.unpaid_before"
+          x-text="`Tiene ${sel.unpaid_before} clase(s) anteriores sin pagar.`"></p>
+
+        <!-- 1. Asistencia -->
+        <section class="flex items-center gap-2">
+          <span class="w-7 h-7 rounded-full grid place-items-center text-sm font-bold bg-emerald-500 text-white" x-show="sel.attendance_id">✓</span>
+          <span class="w-7 h-7 rounded-full grid place-items-center text-sm font-bold bg-stone-900 text-white" x-show="!sel.attendance_id">1</span>
+          <h3 class="font-semibold">Asistencia</h3>
+          <span class="ml-auto text-sm" :class="sel.attendance_id ? 'text-emerald-700' : 'text-stone-500'"
+            x-text="sel.attendance_id ? `Llegó ${timeOf(sel.checked_in_at)} · ${sel.check_in_method === 'nfc' ? 'con chapita' : 'marcado a mano'}` : 'Se marcará al confirmar'"></span>
         </section>
 
         <!-- 2. Pago -->
         <section class="space-y-2">
           <div class="flex items-center gap-2">
             <span class="w-7 h-7 rounded-full grid place-items-center text-sm font-bold"
-              :class="!needPay || method ? 'bg-emerald-500 text-white' : 'bg-stone-900 text-white'">2</span>
+              :class="!needPay || method ? 'bg-emerald-500 text-white' : 'bg-stone-900 text-white'" x-text="!needPay ? '✓' : '2'"></span>
             <h3 class="font-semibold">Pago</h3>
             <span class="ml-auto text-sm text-emerald-700" x-show="!needPay"
               x-text="`${App.money(sel.amount_cents)} · ${App.METHOD_LABEL[sel.method]} · ${sel.received_by_name}`"></span>
@@ -156,9 +158,9 @@
                 </template>
               </div>
               <div class="flex items-center gap-2">
-                <label class="text-sm text-stone-600" for="amt">Monto $</label>
+                <label class="text-sm text-stone-600 whitespace-nowrap" for="amt">Monto $</label>
                 <input id="amt" class="input max-w-[8rem]" inputmode="decimal" x-model="amount">
-                <span class="text-xs text-stone-500">Precargado según el curso. Toca un método para cobrar.</span>
+                <span class="text-xs text-stone-500">Precargado según el curso.</span>
               </div>
             </div>
           </template>
@@ -166,29 +168,29 @@
 
         <!-- 3. Banda -->
         <section class="space-y-2">
-          <div class="flex items-center gap-2">
-            <span class="w-7 h-7 rounded-full grid place-items-center text-sm font-bold"
-              :class="!needBand || band ? 'bg-emerald-500 text-white' : 'bg-stone-900 text-white'">3</span>
-            <h3 class="font-semibold">Banda</h3>
-          </div>
           <label class="flex items-center gap-3 card px-4 py-3 cursor-pointer" x-show="needBand">
             <input type="checkbox" class="w-6 h-6 accent-indigo-700" x-model="band">
             <span class="w-5 h-5 rounded-full border" :style="`background:${bandHex(current.band)}`"></span>
             <span>Entregué la banda <strong x-text="current.band"></strong></span>
           </label>
-          <p class="text-sm text-emerald-700" x-show="!needBand" x-text="`Banda ${sel.band_code} entregada`"></p>
+          <p class="text-sm text-emerald-700" x-show="!needBand" x-text="`✓ Banda ${sel.band_code} entregada`"></p>
         </section>
 
         <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" x-show="error" x-text="error" role="alert"></p>
 
-        <div class="flex flex-col-reverse sm:flex-row gap-2 sticky -bottom-5 sm:-bottom-6 -mx-5 sm:-mx-6 px-5 sm:px-6 py-3 bg-white border-t border-stone-100">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <a class="text-accent underline" :href="`/estudiantes?id=${sel.id}`">Ver ficha completa</a>
           <template x-if="isAdmin && sel.attendance_id">
-            <div class="flex gap-2">
-              <button type="button" class="btn btn-danger text-sm" x-show="sel.method" @click="undo('pago')">Anular pago</button>
-              <button type="button" class="btn btn-danger text-sm" @click="undo()">Anular check-in</button>
+            <div class="flex gap-4 ml-auto">
+              <button type="button" class="text-red-700 underline" x-show="sel.method" @click="undo('pago')">Anular pago</button>
+              <button type="button" class="text-red-700 underline" @click="undo()">Anular asistencia</button>
             </div>
           </template>
-          <button type="button" class="btn btn-primary btn-lg sm:ml-auto sm:min-w-[14rem]" x-show="!complete(sel)"
+        </div>
+
+        <div class="flex flex-col-reverse sm:flex-row gap-2 sticky -bottom-5 sm:-bottom-6 -mx-5 sm:-mx-6 px-5 sm:px-6 py-3 bg-white border-t border-stone-100">
+          <button type="button" class="btn btn-secondary btn-lg sm:mr-auto" x-show="sel.attendance_id && needPay && !complete(sel)" @click="close()">Cobrar después</button>
+          <button type="button" class="btn btn-primary btn-lg sm:ml-auto sm:min-w-[16rem]" x-show="!complete(sel)"
             :disabled="!canConfirm || busy" @click="confirm()" x-text="busy ? 'Guardando…' : confirmLabel"></button>
           <button type="button" class="btn btn-secondary btn-lg sm:ml-auto" x-show="complete(sel)" @click="close()">Cerrar</button>
         </div>
@@ -210,17 +212,27 @@ function checkin() {
     filter: 'pendientes',
     filters: [{ key: 'pendientes', label: 'Pendientes' }, { key: 'completos', label: 'Completos' }, { key: 'todos', label: 'Todos' }],
     methods: ['efectivo', 'ath_movil', 'tarjeta'],
-    sel: null, signer: 'estudiante', method: null, amount: '', band: true, hasSig: false, pad: null, sigImg: '',
-    busy: false, error: '', isAdmin: false,
+    sel: null, method: null, amount: '', band: true, photo: '',
+    busy: false, error: '', isAdmin: false, demo: false,
+    nfcSupported: NfcInput.webNfcSupported, nfcOn: false,
+
+    get readerReady() { return this.nfcOn || !this.nfcSupported; },
+    get readerHint() {
+      if (this.nfcOn) return 'NFC de la tablet activo. Acerca la chapita a la parte de atrás.';
+      if (this.nfcSupported) return 'Toca "Activar lector NFC" una vez para empezar.';
+      return 'Usa el lector USB de chapitas. Si alguien no la trae, tócalo en la lista.';
+    },
 
     async init() {
-      App.me().then((r) => (this.isAdmin = r.user.role === 'admin'));
+      App.me().then((r) => { this.isAdmin = r.user.role === 'admin'; this.demo = r.demo; });
+      NfcInput.on((uid) => this.tap(uid));
       await this.loadDay();
       const fromUrl = Number(new URLSearchParams(location.search).get('s'));
       const pick = this.day.sessions.find((s) => s.id === fromUrl) || this.day.sessions[0];
       if (pick) await this.openSession(pick.id);
     },
     bandHex(code) { return BAND_HEX[(code || '').split('-')[0]] || '#a8a29e'; },
+    timeOf(iso) { return iso ? new Date(iso).toLocaleTimeString('es-PR', { timeZone: 'America/Puerto_Rico', hour: 'numeric', minute: '2-digit' }) : ''; },
     async loadDay() {
       try { this.day = await App.api('GET', '/api/checkin/day'); }
       catch (e) { App.toast(e.message, 'error'); }
@@ -234,6 +246,35 @@ function checkin() {
         history.replaceState(null, '', `?s=${id}`);
       } catch (e) { App.toast(e.message, 'error'); }
     },
+    async startNfc() {
+      try { await NfcInput.startWebNfc(); this.nfcOn = true; App.toast('Lector NFC activo'); }
+      catch (e) { App.toast(e.message || 'No se pudo activar el NFC', 'error'); }
+    },
+
+    // Llega una chapita: marca asistencia y abre la ficha para cobrar.
+    async tap(uid) {
+      try {
+        const r = await App.api('POST', '/api/checkin/tap', { uid });
+        this.close();
+        await Promise.all([this.openSession(r.session_id), this.loadDay()]);
+        const st = this.students.find((s) => s.id === r.student_id);
+        if (st) {
+          this.filter = 'todos';
+          this.openStudent(st);
+          if (r.already) App.toast(`${st.first_name} ya había pasado la chapita`);
+        }
+      } catch (e) {
+        App.toast(e.message, 'error');
+      }
+    },
+    async simulate() {
+      const pending = this.students.filter((s) => s.has_nfc && !s.attendance_id);
+      if (!pending.length) return App.toast('No quedan estudiantes con chapita pendientes en esta clase', 'error');
+      const st = pending[Math.floor(Math.random() * pending.length)];
+      const d = await App.api('GET', `/api/students/${st.id}`);
+      NfcInput.simulate(d.student.nfc_uid);
+    },
+
     complete(st) { return !!(st.attendance_id && st.method && st.band_delivered); },
     count(key) {
       if (key === 'todos') return this.students.length;
@@ -254,50 +295,33 @@ function checkin() {
       return [a !== null ? `${a} años` : null, st.guardian_name ? `Encargado: ${st.guardian_name}` : null].filter(Boolean).join(' · ');
     },
 
-    get needSign() { return !this.sel.attendance_id; },
     get needPay() { return !this.sel.method; },
     get needBand() { return !this.sel.band_delivered; },
     get canConfirm() {
-      if (this.needSign && !this.hasSig) return false;
-      return (this.needSign && this.hasSig) || (this.needPay && this.method) || (this.needBand && this.band);
+      return !this.sel.attendance_id || (this.needPay && this.method) || (this.needBand && this.band);
     },
     get confirmLabel() {
-      const parts = [];
-      if (this.needPay && this.method) parts.push(`Cobrar ${App.money(Math.round(parseFloat(this.amount || 0) * 100))}`);
-      return parts.length ? `Confirmar · ${parts[0]}` : 'Confirmar check-in';
+      if (this.needPay && this.method) return `Cobrar ${App.money(Math.round(parseFloat(this.amount || 0) * 100))} y confirmar`;
+      return this.sel.attendance_id ? 'Confirmar' : 'Marcar asistencia';
     },
 
-    openStudent(st) {
+    async openStudent(st) {
       this.sel = st;
       this.error = '';
-      this.sigImg = '';
       this.method = null;
-      this.hasSig = false;
       this.band = true;
+      this.photo = '';
       this.amount = (this.current.price_cents / 100).toFixed(2);
-      const a = App.age(st.birth_date);
-      this.signer = a !== null && a < 18 ? 'encargado' : 'estudiante';
-      this.$nextTick(() => {
-        if (this.$refs.sig) {
-          this.pad = new SignaturePad(this.$refs.sig);
-          this.pad.onChange = () => (this.hasSig = !this.pad.isEmpty());
-        }
-      });
+      if (st.has_photo) {
+        const id = st.id;
+        App.api('GET', `/api/students/${id}/photo`).then((r) => { if (this.sel?.id === id) this.photo = r.photo; }).catch(() => {});
+      }
     },
-    close() {
-      this.pad?.destroy();
-      this.pad = null;
-      this.sel = null;
-    },
-    async showSignature() {
-      try { this.sigImg = (await App.api('GET', `/api/attendance/${this.sel.attendance_id}/signature`)).signature; }
-      catch (e) { App.toast(e.message, 'error'); }
-    },
+    close() { this.sel = null; },
     async confirm() {
       this.busy = true;
       this.error = '';
       const body = { session_id: this.current.id, student_id: this.sel.id, wristband: this.needBand && this.band };
-      if (this.needSign) { body.signature = this.pad.toDataURL(); body.signed_by = this.signer; }
       if (this.needPay && this.method) body.payment = { method: this.method, amount: this.amount };
       try {
         await App.api('POST', '/api/checkin', body);
@@ -313,7 +337,7 @@ function checkin() {
       }
     },
     async undo(only) {
-      const what = only === 'pago' ? 'el pago' : 'todo el check-in (firma, pago y banda)';
+      const what = only === 'pago' ? 'el pago' : 'la asistencia completa (pago y banda incluidos)';
       if (!confirm(`¿Anular ${what} de ${this.sel.first_name}? Queda registrado en la auditoría.`)) return;
       try {
         await App.api('DELETE', `/api/checkin/${this.sel.attendance_id}${only ? '?only=pago' : ''}`);

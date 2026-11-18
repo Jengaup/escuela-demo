@@ -143,6 +143,17 @@ CREATE INDEX idx_audit_created ON audit_log(created_at);
 INSERT INTO programs (name) VALUES ('Modelaje'), ('Costura'), ('Cocina');
 INSERT INTO levels (name, sort_order) VALUES ('Básico', 1), ('Intermedio', 2), ('Avanzado', 3);
 
-INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('admin', 'Administración', 'admin', '0367cbe4c2c59a125b490366eecce4d3a9eb27f56ba83410801a00b7c183107a', '3252e85193d88cc3ca3a695261d2db9f', 100000);
-INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('staff', 'Carmen Rivera', 'staff', '16b695dd9f97bc2e41464e1026b524943c4401229b4e0a95b57301275d9ccaba', '1ba22db81f04a80a1ad982b3e28a418d', 100000);
-INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('staff2', 'Luis Ortiz', 'staff', 'e4a0649cff88e607b35b775744668e9b29df950952b451492a00155d70e3e738', 'd08f44b916f17b724df6c279130e6670', 100000);
+ALTER TABLE students ADD COLUMN nfc_uid TEXT;
+CREATE UNIQUE INDEX idx_students_nfc ON students(nfc_uid) WHERE nfc_uid IS NOT NULL;
+
+CREATE TABLE student_photos (
+  student_id INTEGER PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
+  photo      TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+ALTER TABLE attendance ADD COLUMN check_in_method TEXT NOT NULL DEFAULT 'manual' CHECK (check_in_method IN ('nfc','manual'));
+
+INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('admin', 'Administración', 'admin', 'd161843ef6d130c2f61caddb7033cb8962933f801ea703dd269789e91c0dd167', '086e889d6058a9ce4debcf79a898a825', 100000);
+INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('staff', 'Carmen Rivera', 'staff', 'a40e9b9b4452181028d5e46ab7e3afe53efdceefa027b6f88afad8c9193b6303', 'a1b842b74f0f310eb2bfa6e810d3a551', 100000);
+INSERT INTO users (username, name, role, password_hash, salt, iterations) VALUES ('staff2', 'Luis Ortiz', 'staff', '69670642dd1f3b2d7d8bf1d3ef3ae2609a463e889291c5f7a2df5e369df8b45a', '27f0004dda596ab3fbd36535cdeb884f', 100000);

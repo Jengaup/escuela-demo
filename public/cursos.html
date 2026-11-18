@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
 </head>
-<body data-page="cursos" x-data="courses()" x-init="init()">
+<body data-page="cursos" x-data="courses()">
 <div id="shell"></div>
 
 <main class="max-w-6xl mx-auto p-4 space-y-4">
@@ -96,6 +96,7 @@
           <h2 id="rTitle" class="text-xl font-semibold" x-text="roster.course.name"></h2>
           <p class="text-sm text-stone-500" x-text="`${roster.list.filter(e => e.status === 'activo').length} matriculados activos`"></p></div>
           <button type="button" class="ml-auto btn-ghost text-2xl leading-none" @click="roster = null" aria-label="Cerrar">&times;</button></div>
+        <a class="btn btn-secondary w-full" :href="`/lista?course=${roster.course.id}`" target="_blank" rel="noopener">Imprimir lista para firmar</a>
         <div class="flex gap-2">
           <select class="input" x-model.number="addStudent" aria-label="Estudiante a matricular">
             <option value="">Añadir estudiante…</option>

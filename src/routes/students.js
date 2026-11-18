@@ -1,5 +1,5 @@
 import { json, readJson, badRequest, notFound, HttpError } from '../http.js';
-import { V, idParam } from '../validate.js';
+import { V, idParam, normalizeUid } from '../validate.js';
 import { auditStmt } from '../audit.js';
 import { requireAdmin } from '../auth.js';
 import { todayPR } from '../time.js';
@@ -36,6 +36,9 @@ function validateGuardians(list) {
   });
 }
 
+// Las fotos se reducen en el navegador a ~400 px; 300 KB es margen de sobra.
+const MAX_PHOTO = 300 * 1024;
+
 const insertStudentSql = `INSERT INTO students (first_name, last_name, birth_date, guardian_name, phone, email, notes)
   VALUES (?,?,?,?,?,?,?) RETURNING id`;
 export const studentParams = (s) => [s.first_name, s.last_name, s.birth_date, s.guardian_name, s.phone, s.email, s.notes];
@@ -60,6 +63,7 @@ export function register(r) {
     }
     const { results } = await ctx.env.DB.prepare(
       `SELECT s.id, s.first_name, s.last_name, s.birth_date, s.guardian_name, s.phone, s.email, s.active,
+              (s.nfc_uid IS NOT NULL) AS has_nfc,
               (SELECT group_concat(${COURSE_LABEL_SQL}, ', ') FROM enrollments e JOIN courses c ON c.id = e.course_id
                  JOIN programs p ON p.id = c.program_id JOIN levels l ON l.id = c.level_id
                 WHERE e.student_id = s.id AND e.status = 'activo') AS courses,
@@ -73,7 +77,9 @@ export function register(r) {
   r.get('/api/students/:id', async (ctx) => {
     const id = idParam(ctx.params);
     const db = ctx.env.DB;
-    const student = await db.prepare('SELECT * FROM students WHERE id = ?').bind(id).first();
+    const student = await db.prepare(
+      'SELECT s.*, EXISTS (SELECT 1 FROM student_photos sp WHERE sp.student_id = s.id) AS has_photo FROM students s WHERE s.id = ?'
+    ).bind(id).first();
     if (!student) throw notFound('Estudiante no encontrado');
     const [guardians, enrollments, history] = await db.batch([
       db.prepare('SELECT id, name, relationship, phone, email FROM guardians WHERE student_id = ? ORDER BY id').bind(id),
@@ -84,7 +90,7 @@ export function register(r) {
           WHERE e.student_id = ? ORDER BY e.status, course_name`
       ).bind(id),
       db.prepare(
-        `SELECT a.id AS attendance_id, cs.date, ${COURSE_LABEL_SQL} AS course_name, a.signed_by, a.signed_at,
+        `SELECT a.id AS attendance_id, cs.date, ${COURSE_LABEL_SQL} AS course_name, a.check_in_method,
                 pm.amount_cents, pm.method, u.name AS received_by, w.delivered AS band_delivered, w.code AS band_code
            FROM attendance a JOIN class_sessions cs ON cs.id = a.session_id
            JOIN courses c ON c.id = cs.course_id JOIN programs p ON p.id = c.program_id JOIN levels l ON l.id = c.level_id
@@ -151,6 +157,76 @@ export function register(r) {
     if (!active) stmts.push(db.prepare(`UPDATE enrollments SET status = 'inactivo' WHERE student_id = ?`).bind(id));
     stmts.push(auditStmt(ctx, 'editar_estudiante', 'student', id, { ...s, active }));
     await db.batch(stmts);
+    return json({ ok: true });
+  });
+
+  // ----- Chapita NFC -----
+  r.post('/api/students/:id/nfc', async (ctx) => {
+    const id = idParam(ctx.params);
+    const body = await readJson(ctx.request, 4096);
+    const uid = normalizeUid(body.uid);
+    if (!uid) throw badRequest('Lectura de chapita inválida. Intenta de nuevo.');
+    const db = ctx.env.DB;
+    const st = await db.prepare('SELECT id, first_name, last_name, nfc_uid FROM students WHERE id = ?').bind(id).first();
+    if (!st) throw notFound('Estudiante no encontrado');
+    const owner = await db.prepare('SELECT id, first_name, last_name FROM students WHERE nfc_uid = ? AND id <> ?').bind(uid, id).first();
+    if (owner && !body.force) {
+      return json({ error: `Esa chapita ya es de ${owner.first_name} ${owner.last_name}`, owner }, 409);
+    }
+    const stmts = [];
+    if (owner) stmts.push(db.prepare('UPDATE students SET nfc_uid = NULL WHERE id = ?').bind(owner.id));
+    stmts.push(db.prepare(`UPDATE students SET nfc_uid = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).bind(uid, id));
+    stmts.push(auditStmt(ctx, 'asignar_chapita', 'student', id, {
+      estudiante: `${st.first_name} ${st.last_name}`, reemplaza: !!st.nfc_uid,
+      ...(owner ? { quitada_a: `${owner.first_name} ${owner.last_name}` } : {}),
+    }));
+    await db.batch(stmts);
+    return json({ ok: true });
+  });
+
+  r.delete('/api/students/:id/nfc', async (ctx) => {
+    const id = idParam(ctx.params);
+    const db = ctx.env.DB;
+    const res = await db.batch([
+      db.prepare(`UPDATE students SET nfc_uid = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND nfc_uid IS NOT NULL`).bind(id),
+      auditStmt(ctx, 'quitar_chapita', 'student', id),
+    ]);
+    if (!res[0].meta.changes) throw notFound('El estudiante no tiene chapita');
+    return json({ ok: true });
+  });
+
+  // ----- Foto -----
+  r.get('/api/students/:id/photo', async (ctx) => {
+    const id = idParam(ctx.params);
+    const row = await ctx.env.DB.prepare('SELECT photo FROM student_photos WHERE student_id = ?').bind(id).first();
+    if (!row) throw notFound('Sin foto');
+    return json({ photo: row.photo });
+  });
+
+  r.put('/api/students/:id/photo', async (ctx) => {
+    const id = idParam(ctx.params);
+    const body = await readJson(ctx.request, MAX_PHOTO + 1024);
+    const photo = body.photo;
+    if (typeof photo !== 'string' || photo.length > MAX_PHOTO || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(photo)) {
+      throw badRequest('Foto inválida o demasiado grande');
+    }
+    const db = ctx.env.DB;
+    const st = await db.prepare('SELECT id FROM students WHERE id = ?').bind(id).first();
+    if (!st) throw notFound('Estudiante no encontrado');
+    await db.batch([
+      db.prepare(`INSERT INTO student_photos (student_id, photo) VALUES (?,?)
+                  ON CONFLICT(student_id) DO UPDATE SET photo = excluded.photo, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`).bind(id, photo),
+      auditStmt(ctx, 'foto_estudiante', 'student', id),
+    ]);
+    return json({ ok: true });
+  });
+
+  r.delete('/api/students/:id/photo', async (ctx) => {
+    const id = idParam(ctx.params);
+    await ctx.env.DB.batch([
+      ctx.env.DB.prepare('DELETE FROM student_photos WHERE student_id = ?').bind(id),
+      auditStmt(ctx, 'quitar_foto', 'student', id),
+    ]);
     return json({ ok: true });
   });
 

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es-PR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lista de asistencia · Escuela de Artes</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/app.js"></script>
+<style>
+  @page { size: letter portrait; margin: 12mm; }
+  .sheet td, .sheet th { border: 1px solid #a8a29e; padding: 6px 8px; }
+  .sheet th { background: #f5f5f4; font-size: 12px; text-align: left; }
+  .sheet td { height: 34px; font-size: 13px; }
+</style>
+</head>
+<body class="bg-white" x-data="lista()" x-init="load()">
+<div class="no-print bg-stone-100 border-b border-stone-200">
+  <div class="max-w-4xl mx-auto px-4 py-3 flex flex-wrap items-center gap-2">
+    <button type="button" @click="history.length > 1 ? history.back() : window.close()" class="btn btn-ghost">‹ Volver</button>
+    <label class="flex items-center gap-2 text-sm ml-auto">
+      Filas en blanco <input type="number" min="0" max="20" class="input w-20" x-model.number="extra">
+    </label>
+    <button type="button" class="btn btn-primary" @click="window.print()" :disabled="!loaded">Imprimir</button>
+  </div>
+</div>
+
+<main class="max-w-4xl mx-auto p-6 print:p-0" x-show="loaded" x-cloak>
+  <header class="flex items-start gap-4 mb-4">
+    <div class="flex-1">
+      <div class="text-sm text-stone-500">Escuela de Artes · Lista de asistencia</div>
+      <h1 class="text-2xl font-semibold text-stone-900" x-text="info.course"></h1>
+      <div class="text-sm text-stone-600" x-text="`${info.schedule} · Instructor: ${info.instructor}`"></div>
+    </div>
+    <div class="text-right text-sm">
+      <div>Fecha: <strong x-text="info.date ? App.fmtDate(info.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '______________________'"></strong></div>
+      <div class="text-stone-500" x-text="`${rows.length} matriculado(s)`"></div>
+    </div>
+  </header>
+
+  <table class="sheet w-full border-collapse">
+    <thead>
+      <tr><th class="w-8">#</th><th>Estudiante</th><th>Encargado</th><th class="w-20">Hora</th><th class="w-48">Firma</th><th class="w-24">Pagó</th></tr>
+    </thead>
+    <tbody>
+      <template x-for="(r, i) in rows" :key="r.id">
+        <tr>
+          <td class="text-stone-500" x-text="i + 1"></td>
+          <td class="font-medium" x-text="r.name"></td>
+          <td x-text="r.guardian || ''"></td>
+          <td></td><td></td><td></td>
+        </tr>
+      </template>
+      <template x-for="n in extra" :key="'x' + n">
+        <tr><td class="text-stone-400" x-text="rows.length + n"></td><td></td><td></td><td></td><td></td><td></td></tr>
+      </template>
+    </tbody>
+  </table>
+
+  <div class="grid grid-cols-2 gap-12 mt-12 text-sm">
+    <div class="border-t border-stone-400 pt-1">Firma del instructor</div>
+    <div class="border-t border-stone-400 pt-1">Recibido por (administración)</div>
+  </div>
+</main>
+<p class="p-6 text-stone-500" x-show="error" x-text="error"></p>
+
+<script>
+function lista() {
+  return {
+    info: {}, rows: [], extra: 5, loaded: false, error: '',
+    async load() {
+      const q = new URLSearchParams(location.search);
+      const s = Number(q.get('s')), courseId = Number(q.get('course'));
+      const byName = (a, b) => a.name.localeCompare(b.name, 'es');
+      try {
+        if (s) {
+          // Lista de una clase específica (fecha incluida)
+          const r = await App.api('GET', `/api/checkin/session/${s}`);
+          const c = r.session;
+          this.info = { course: c.course_name, instructor: c.instructor, date: c.date, schedule: `${App.fmtTime(c.start_time)} – ${App.fmtTime(c.end_time)}` };
+          this.rows = r.students.map((x) => ({ id: x.id, name: `${x.first_name} ${x.last_name}`, guardian: x.guardian_name })).sort(byName);
+        } else if (courseId) {
+          // Lista del curso con la fecha en blanco (para imprimir varias y llenar a mano)
+          const [cs, en] = await Promise.all([App.api('GET', '/api/courses?all=1'), App.api('GET', `/api/courses/${courseId}/enrollments`)]);
+          const c = cs.courses.find((x) => x.id === courseId);
+          if (!c) throw new Error('Curso no encontrado');
+          this.info = { course: c.name, instructor: c.instructor, date: q.get('date') || '', schedule: `${App.daysLabel(c.days)} · ${App.fmtTime(c.start_time)} – ${App.fmtTime(c.end_time)}` };
+          this.rows = en.enrollments.filter((e) => e.status === 'activo')
+            .map((x) => ({ id: x.student_id, name: `${x.first_name} ${x.last_name}`, guardian: x.guardian_name })).sort(byName);
+        } else throw new Error('Falta la clase o el curso');
+        document.title = `Lista · ${this.info.course}`;
+        this.loaded = true;
+      } catch (e) { this.error = e.message; }
+    },
+  };
+}
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+</body>
+</html>

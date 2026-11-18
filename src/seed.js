@@ -1,7 +1,6 @@
 // Datos demo ficticios. Se usa desde Node (scripts/seed.mjs → SQL) y desde el Worker (botón "Resetear datos demo").
 // Devuelve una lista de { sql, params } con ≤ 100 parámetros cada uno (límite de D1).
 import { addDays, weekday, bandOfDay } from './time.js';
-import { demoSignature } from './png.js';
 
 export const DEMO_USERS = [
   { username: 'admin', name: 'Administración', role: 'admin', password: 'Admin#2026' },
@@ -10,7 +9,7 @@ export const DEMO_USERS = [
 ];
 
 // Tablas de datos (orden de borrado respeta llaves foráneas). Usuarios no se tocan.
-export const DATA_TABLES = ['wristbands', 'payments', 'attendance', 'class_sessions', 'enrollments', 'courses', 'guardians', 'students', 'audit_log'];
+export const DATA_TABLES = ['wristbands', 'payments', 'attendance', 'class_sessions', 'enrollments', 'courses', 'guardians', 'student_photos', 'students', 'audit_log'];
 
 const FIRST_F = ['Valeria', 'Camila', 'Sofía', 'Isabella', 'Gabriela', 'Natalia', 'Andrea', 'Paola', 'Mariana', 'Kiara', 'Yaritza', 'Keishla', 'Nicole', 'Alondra', 'Génesis', 'Adriana', 'Coral', 'Zuleyka', 'Nahomy', 'Ivelisse'];
 const FIRST_M = ['Luis', 'José', 'Carlos', 'Javier', 'Joshua', 'Jean Carlos', 'Adrián', 'Daniel', 'Yadiel', 'Ángel'];
@@ -43,7 +42,7 @@ function localToIso(date, hhmm, plusMin = 0) {
 }
 
 function inserts(table, cols, rows, out, maxRowsBySize = 50) {
-  const perStmt = Math.max(1, Math.min(maxRowsBySize, Math.floor(100 / cols.length)));
+  const perStmt = Math.max(1, Math.min(maxRowsBySize, Math.floor(99 / cols.length)));
   for (let i = 0; i < rows.length; i += perStmt) {
     const part = rows.slice(i, i + perStmt);
     const ph = part.map(() => `(${cols.map(() => '?').join(',')})`).join(',');
@@ -101,7 +100,11 @@ export function buildSeed(today, opts = {}) {
     const email = `${ascii(first)}.${ascii(last.split(' ')[0])}${Math.floor(r() * 90 + 10)}@ejemplo.com`;
     students.push([id, first, last, birth, guardianName, phone, minor && r() < 0.5 ? null : email, pick(NOTES), minor]);
   }
-  inserts('students', ['id', 'first_name', 'last_name', 'birth_date', 'guardian_name', 'phone', 'email', 'notes'], students.map((s) => s.slice(0, 8)), out);
+  // Chapita NFC de prueba (UID de 7 bytes como las NTAG). Los últimos 2 estudiantes quedan sin chapita.
+  const hex = () => Math.floor(r() * 256).toString(16).padStart(2, '0').toUpperCase();
+  const uid = (id) => (id > 28 ? null : '04' + Array.from({ length: 6 }, hex).join(''));
+  inserts('students', ['id', 'first_name', 'last_name', 'birth_date', 'guardian_name', 'phone', 'email', 'notes', 'nfc_uid'],
+    students.map((s) => [...s.slice(0, 8), uid(s[0])]), out);
   inserts('guardians', ['student_id', 'name', 'relationship', 'phone', 'email'], guardians, out);
 
   // ---------- Cursos ----------
@@ -165,22 +168,21 @@ export function buildSeed(today, opts = {}) {
     enrolled.forEach((stuId, idx) => {
       if (isToday ? idx >= 3 : r() > 0.85) return;
       const id = ++aid;
-      const student = students[stuId - 1];
       const t = localToIso(s.date, s.course[4], -10 + Math.floor(r() * 20));
       const user = staffPick();
-      att.push({ row: [id, s.id, stuId, demoSignature(id), student[8] ? 'encargado' : 'estudiante', t, user], user });
-      // Hoy: el 3er estudiante solo firmó (sin pago ni banda).
+      att.push([id, s.id, stuId, stuId > 28 || r() < 0.08 ? 'manual' : 'nfc', user, t]);
+      // Hoy: el 3er estudiante pasó la chapita pero todavía no ha pagado.
       if (isToday && idx === 2) return;
       if (isToday || r() < 0.95) pay.push([id, s.course[6], methodPick(), user, s.date, t]);
       bands.push([id, 1, bandOfDay(s.date), user, t]);
     });
   }
   // Inserciones con subconsultas para resolver IDs de usuario por username.
-  for (const a of att) {
-    const [id, sessId, stuId, sig, by, t, user] = a.row;
+  for (let i = 0; i < att.length; i += 15) {
+    const part = att.slice(i, i + 15);
     out.push({
-      sql: `INSERT INTO attendance (id, session_id, student_id, signature, signed_by, signed_at, recorded_by, created_at) VALUES (?,?,?,?,?,?,${staffSql(user)},?)`,
-      params: [id, sessId, stuId, sig, by, t, t],
+      sql: `INSERT INTO attendance (id, session_id, student_id, check_in_method, recorded_by, created_at) VALUES ${part.map((a) => `(?,?,?,?,${staffSql(a[4])},?)`).join(',')}`,
+      params: part.flatMap((a) => [a[0], a[1], a[2], a[3], a[5]]),
     });
   }
   for (let i = 0; i < pay.length; i += 12) {

@@ -109,6 +109,13 @@ export function normalizePhone(s) {
   return String(s).trim();
 }
 
+// UID de chapita NFC: el lector puede entregarlo como "04:A2:1B:..." (Web NFC) o "04A21B..." / "0012345678" (lector USB).
+export function normalizeUid(x) {
+  if (typeof x !== 'string' && typeof x !== 'number') return null;
+  const s = String(x).toUpperCase().replace(/[\s:\-]/g, '');
+  return /^[0-9A-F]{4,32}$/.test(s) ? s : null;
+}
+
 export function idParam(params, key = 'id') {
   const n = Number(params[key]);
   if (!Number.isInteger(n) || n <= 0) throw badRequest('ID inválido');

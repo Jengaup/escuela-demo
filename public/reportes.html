@@ -11,7 +11,7 @@
 <script src="/assets/app.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
-<body data-page="reportes" x-data="reports()" x-init="init()">
+<body data-page="reportes" x-data="reports()">
 <div id="shell"></div>
 
 <main class="max-w-6xl mx-auto p-4 space-y-4">
@@ -71,12 +71,12 @@
 
   <div class="card overflow-x-auto" x-show="tab === 'attendance'">
     <table class="table">
-      <thead><tr><th>Fecha</th><th>Curso</th><th>Estudiante</th><th>Firmó</th><th>Pago</th><th>Cobró</th><th>Banda</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Curso</th><th>Estudiante</th><th>Entrada</th><th>Pago</th><th>Cobró</th><th>Banda</th></tr></thead>
       <tbody>
         <template x-for="(a, i) in (r?.attendance || []).slice(0, limit)" :key="i">
           <tr><td class="whitespace-nowrap" x-text="App.fmtDate(a.date)"></td><td x-text="a.course_name"></td>
             <td><a class="text-accent" :href="`/estudiantes?id=${a.student_id}`" x-text="a.student"></a></td>
-            <td x-text="a.signed_by === 'encargado' ? 'Encargado' : 'Estudiante'"></td>
+            <td x-text="a.check_in_method === 'nfc' ? 'Chapita' : 'Manual'"></td>
             <td class="whitespace-nowrap"><span x-show="a.method" x-text="`${App.money(a.amount_cents)} · ${App.METHOD_LABEL[a.method]}`"></span>
               <span x-show="!a.method" class="pill bg-amber-100 text-amber-800">Pendiente</span></td>
             <td x-text="a.received_by || ''"></td><td x-text="a.band ? a.band_code : '—'"></td></tr>
@@ -151,7 +151,7 @@ function reports() {
         Resumen: this.r.summary.map((s) => ({ Curso: s.course_name, Clases: s.sessions, Asistencias: s.attendances, Pagadas: s.paid_count,
           Efectivo: $(s.efectivo), 'ATH Móvil': $(s.ath_movil), Tarjeta: $(s.tarjeta), Total: $(s.collected) })),
         Asistencia: this.r.attendance.map((a) => ({ Fecha: a.date, Curso: a.course_name, Estudiante: a.student,
-          'Firmó': a.signed_by, 'Monto': $(a.amount_cents), 'Método': a.method ? App.METHOD_LABEL[a.method] : 'Pendiente', 'Cobró': a.received_by || '', Banda: a.band ? a.band_code : '' })),
+          Entrada: a.check_in_method === 'nfc' ? 'Chapita' : 'Manual', 'Monto': $(a.amount_cents), 'Método': a.method ? App.METHOD_LABEL[a.method] : 'Pendiente', 'Cobró': a.received_by || '', Banda: a.band ? a.band_code : '' })),
         Pagos: this.r.payments.map((p) => ({ 'Fecha cobro': p.local_date, Hora: App.fmtDateTime(p.created_at), Estudiante: p.student, Curso: p.course_name,
           'Fecha clase': p.class_date, 'Método': App.METHOD_LABEL[p.method], 'Cobró': p.received_by, Monto: $(p.amount_cents) })),
       };

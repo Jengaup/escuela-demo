@@ -9,8 +9,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18/dist/index.global.js"></script>
 <link rel="stylesheet" href="/assets/app.css">
 <script src="/assets/app.js"></script>
+<script src="/assets/nfc.js"></script>
 </head>
-<body data-page="estudiantes" x-data="students()" x-init="init()">
+<body data-page="estudiantes" x-data="students()">
 <div id="shell"></div>
 
 <main class="max-w-6xl mx-auto p-4 space-y-4">
@@ -46,6 +47,7 @@
         <div class="md:col-span-2 text-sm text-stone-500">
           <span x-text="s.last_visit ? App.fmtDate(s.last_visit) : '—'"></span>
           <span class="pill bg-stone-200 text-stone-600 ml-1" x-show="!s.active">Inactivo</span>
+          <span class="pill bg-amber-100 text-amber-800 ml-1" x-show="s.active && !s.has_nfc">Sin chapita</span>
         </div>
       </button>
     </template>
@@ -77,6 +79,45 @@
 
         <!-- Datos -->
         <form class="p-5 space-y-4" x-show="tab === 'datos'" @submit.prevent="save()" novalidate>
+          <!-- Foto y chapita -->
+          <div class="grid gap-3 sm:grid-cols-2" x-show="form.id">
+            <div class="card p-3 flex items-center gap-3">
+              <div class="w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-stone-100 grid place-items-center text-2xl font-semibold text-stone-500">
+                <img x-show="photo" :src="photo" alt="Foto del estudiante" class="w-full h-full object-cover">
+                <span x-show="!photo" x-text="(form.first_name[0] || '') + (form.last_name[0] || '')"></span>
+              </div>
+              <div class="flex flex-col gap-2 flex-1">
+                <label class="btn btn-secondary text-sm cursor-pointer">
+                  <span x-text="photoBusy ? 'Subiendo…' : (photo ? 'Cambiar foto' : 'Tomar foto')"></span>
+                  <input type="file" accept="image/*" capture="environment" class="sr-only" @change="uploadPhoto($event)">
+                </label>
+                <button type="button" class="btn btn-ghost text-sm text-red-700" x-show="photo" @click="removePhoto()">Quitar foto</button>
+              </div>
+            </div>
+            <div class="card p-3 space-y-2">
+              <div class="flex items-center gap-2">
+                <span class="font-medium">Chapita NFC</span>
+                <span class="pill ml-auto" :class="form.nfc_uid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
+                  x-text="form.nfc_uid ? 'Asignada · …' + form.nfc_uid.slice(-4) : 'Sin chapita'"></span>
+              </div>
+              <template x-if="!assigning">
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" class="btn btn-primary text-sm flex-1" @click="startAssign()" x-text="form.nfc_uid ? 'Cambiar chapita' : 'Asignar chapita'"></button>
+                  <button type="button" class="btn btn-danger text-sm" x-show="form.nfc_uid" @click="removeNfc()">Quitar chapita</button>
+                </div>
+              </template>
+              <template x-if="assigning">
+                <div class="space-y-2">
+                  <p class="text-sm bg-accent-soft text-accent rounded-lg px-3 py-2 font-medium">Pasa la chapita por el lector ahora…</p>
+                  <div class="flex gap-2">
+                    <button type="button" class="btn btn-secondary text-sm" x-show="nfcSupported && !nfcOn" @click="startNfc()">Activar NFC</button>
+                    <button type="button" class="btn btn-ghost text-sm ml-auto" @click="assigning = false">Cancelar</button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
           <div class="grid gap-3 sm:grid-cols-2">
             <div><label class="label" for="fn">Nombre *</label><input id="fn" class="input" x-model="form.first_name" maxlength="60" required>
               <p class="field-error" x-text="errors.first_name"></p></div>
@@ -163,13 +204,13 @@
         <div class="p-5" x-show="tab === 'historial'">
           <div class="overflow-x-auto">
             <table class="table">
-              <thead><tr><th>Fecha</th><th>Clase</th><th>Firma</th><th>Pago</th><th>Banda</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Clase</th><th>Entrada</th><th>Pago</th><th>Banda</th></tr></thead>
               <tbody>
                 <template x-for="h in detail?.history || []" :key="h.attendance_id">
                   <tr>
                     <td class="whitespace-nowrap" x-text="App.fmtDate(h.date)"></td>
                     <td x-text="h.course_name"></td>
-                    <td><button type="button" class="text-accent underline text-sm" @click="viewSig(h)" x-text="h.signed_by === 'encargado' ? 'Encargado' : 'Estudiante'"></button></td>
+                    <td x-text="h.check_in_method === 'nfc' ? 'Chapita' : 'Manual'"></td>
                     <td class="whitespace-nowrap">
                       <span x-show="h.method" x-text="`${App.money(h.amount_cents)} · ${App.METHOD_LABEL[h.method]}`"></span>
                       <span x-show="!h.method" class="pill bg-amber-100 text-amber-800">Pendiente</span>
@@ -181,10 +222,6 @@
             </table>
           </div>
           <p class="text-stone-500 py-4" x-show="!detail?.history.length">Sin asistencias registradas.</p>
-          <div x-show="sig" class="mt-3 card p-3">
-            <div class="flex items-center text-sm mb-2"><span x-text="sigLabel"></span><button type="button" class="ml-auto btn-ghost" @click="sig = ''">Cerrar</button></div>
-            <img :src="sig" alt="Firma" class="max-h-40 border rounded-lg border-stone-200">
-          </div>
         </div>
       </div>
     </template>
@@ -196,9 +233,10 @@ function students() {
   const blank = () => ({ id: null, first_name: '', last_name: '', birth_date: '', guardian_name: '', phone: '', email: '', notes: '', active: true, guardians: [], course_ids: [] });
   return {
     list: [], loaded: false, q: '', status: 'activo', courseFilter: '', courses: [], isAdmin: false,
-    form: null, detail: null, tab: 'datos', errors: {}, error: '', busy: false, enrollCourse: '', sig: '', sigLabel: '',
+    form: null, detail: null, tab: 'datos', errors: {}, error: '', busy: false, enrollCourse: '', photo: '', photoBusy: false, assigning: false, nfcSupported: NfcInput.webNfcSupported, nfcOn: false,
     async init() {
       App.me().then((r) => (this.isAdmin = r.user.role === 'admin'));
+      NfcInput.on((uid) => this.onTag(uid));
       App.api('GET', '/api/courses').then((r) => (this.courses = r.courses));
       await this.load();
       const id = Number(new URLSearchParams(location.search).get('id'));
@@ -219,7 +257,9 @@ function students() {
         this.form = { ...blank(), ...d.student, active: !!d.student.active, birth_date: d.student.birth_date || '',
           guardians: d.guardians.map((g) => ({ name: g.name, relationship: g.relationship || '', phone: g.phone || '', email: g.email || '' })) };
         for (const k of ['guardian_name', 'phone', 'email', 'notes']) this.form[k] ||= '';
-        this.tab = 'datos'; this.errors = {}; this.error = ''; this.sig = '';
+        this.tab = 'datos'; this.errors = {}; this.error = ''; this.assigning = false;
+        this.photo = '';
+        if (d.student.has_photo) App.api('GET', `/api/students/${id}/photo`).then((r) => { if (this.form?.id === id) this.photo = r.photo; }).catch(() => {});
       } catch (e) { App.toast(e.message, 'error'); }
     },
     async save() {
@@ -259,11 +299,62 @@ function students() {
       try { await App.api('PUT', `/api/enrollments/${e.id}`, { status }); await this.open(this.form.id); this.tab = 'cursos'; this.load(); }
       catch (err) { App.toast(err.message, 'error'); }
     },
-    async viewSig(h) {
+    // ----- Chapita -----
+    startAssign() { this.assigning = true; },
+    async startNfc() {
+      try { await NfcInput.startWebNfc(); this.nfcOn = true; } catch (e) { App.toast(e.message, 'error'); }
+    },
+    async onTag(uid) {
+      if (!this.assigning || !this.form?.id) return;
+      this.assigning = false;
       try {
-        this.sig = (await App.api('GET', `/api/attendance/${h.attendance_id}/signature`)).signature;
-        this.sigLabel = `Firma del ${h.signed_by} · ${App.fmtDate(h.date)} · ${h.course_name}`;
+        try { await App.api('POST', `/api/students/${this.form.id}/nfc`, { uid }); }
+        catch (e) {
+          if (e.status === 409 && confirm(`${e.message}. ¿Pasársela a ${this.form.first_name}? La otra persona se quedará sin chapita.`)) {
+            await App.api('POST', `/api/students/${this.form.id}/nfc`, { uid, force: true });
+          } else throw e;
+        }
+        App.toast('Chapita asignada');
+        await this.open(this.form.id);
+        this.load();
       } catch (e) { App.toast(e.message, 'error'); }
+    },
+    async removeNfc() {
+      if (!confirm(`¿Quitarle la chapita a ${this.form.first_name}? Esa chapita dejará de funcionar.`)) return;
+      try { await App.api('DELETE', `/api/students/${this.form.id}/nfc`); App.toast('Chapita quitada'); await this.open(this.form.id); this.load(); }
+      catch (e) { App.toast(e.message, 'error'); }
+    },
+    // ----- Foto: se reduce a 480 px en el navegador antes de subirla -----
+    async uploadPhoto(ev) {
+      const file = ev.target.files[0];
+      ev.target.value = '';
+      if (!file) return;
+      this.photoBusy = true;
+      try {
+        const img = await new Promise((ok, fail) => {
+          const i = new Image();
+          i.onload = () => ok(i);
+          i.onerror = () => fail(new Error('No se pudo leer la imagen'));
+          i.src = URL.createObjectURL(file);
+        });
+        const side = Math.min(img.width, img.height);
+        const size = Math.min(480, side);
+        const c = document.createElement('canvas');
+        c.width = c.height = size;
+        // Recorte cuadrado centrado
+        c.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+        URL.revokeObjectURL(img.src);
+        const data = c.toDataURL('image/jpeg', 0.8);
+        await App.api('PUT', `/api/students/${this.form.id}/photo`, { photo: data });
+        this.photo = data;
+        App.toast('Foto guardada');
+      } catch (e) { App.toast(e.message, 'error'); }
+      finally { this.photoBusy = false; }
+    },
+    async removePhoto() {
+      if (!confirm('¿Quitar la foto?')) return;
+      try { await App.api('DELETE', `/api/students/${this.form.id}/photo`); this.photo = ''; App.toast('Foto quitada'); }
+      catch (e) { App.toast(e.message, 'error'); }
     },
   };
 }
