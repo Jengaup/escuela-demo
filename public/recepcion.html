@@ -65,7 +65,7 @@
 
   <!-- 2. Estudiante: cobrar la clase -->
   <section x-show="view === 'student'" x-cloak class="flex-1 flex flex-col gap-4">
-    <template x-if="st">
+    <template x-if="st && session">
       <div class="flex flex-col gap-4">
         <div class="card p-4 sm:p-5 flex items-center gap-4 sm:gap-6">
           <div class="w-28 h-28 sm:w-36 sm:h-36 shrink-0 rounded-2xl overflow-hidden bg-stone-100 grid place-items-center text-4xl font-semibold text-stone-500">
@@ -147,11 +147,31 @@
   </section>
 
   <!-- Sin clase hoy: puede pagar otra cosa -->
-  <section x-show="view === 'noclass'" x-cloak class="flex-1 flex flex-col items-center justify-center text-center gap-5 py-6 rounded-3xl bg-white">
-    <p class="huge font-bold text-stone-900" x-text="`${st?.first_name || ''} no tiene clase hoy`"></p>
-    <p class="text-xl text-stone-500">Si viene a pagar algo (deuda, examen, matrícula, adelanto), toca el botón.</p>
-    <button type="button" class="btn btn-primary big-btn px-10" @click="openOther()">Cobrar otra cosa</button>
-    <button type="button" class="btn btn-ghost text-lg" @click="reset()">‹ Volver</button>
+  <section x-show="view === 'noclass'" x-cloak class="flex-1 flex flex-col gap-4">
+    <template x-if="st">
+      <div class="flex flex-col gap-4">
+        <div class="card p-4 sm:p-5 flex items-center gap-4 sm:gap-6">
+          <div class="w-28 h-28 sm:w-36 sm:h-36 shrink-0 rounded-2xl overflow-hidden bg-stone-100 grid place-items-center text-4xl font-semibold text-stone-500">
+            <img x-show="photo" :src="photo" alt="" class="w-full h-full object-cover">
+            <span x-show="!photo" x-text="st.first_name[0] + st.last_name[0]"></span>
+          </div>
+          <div class="min-w-0">
+            <h2 class="huge font-bold text-stone-900" x-text="`${st.first_name} ${st.last_name}`"></h2>
+            <p class="text-stone-500" x-show="st.guardian_name" x-text="`Encargado: ${st.guardian_name}`"></p>
+          </div>
+        </div>
+        <div class="card p-5 text-center">
+          <p class="text-2xl font-semibold text-stone-900">Hoy no tiene clase</p>
+          <p class="text-lg text-stone-500 mt-1" x-show="classes.length" x-text="`Sus clases: ${classes.join(' · ')}`"></p>
+        </div>
+        <p class="text-lg text-amber-900 bg-amber-100 rounded-xl px-4 py-3" x-show="st.notes" x-text="'Nota: ' + st.notes"></p>
+        <p class="text-xl font-semibold text-red-800 bg-red-100 rounded-xl px-4 py-3" x-show="totals.due_cents > 0" x-text="`Debe ${App.money(totals.due_cents)}`"></p>
+        <p class="text-xl font-semibold text-emerald-800 bg-emerald-100 rounded-xl px-4 py-3" x-show="totals.credit_cents > 0" x-text="`Tiene ${App.money(totals.credit_cents)} a favor`"></p>
+        <p class="text-lg text-stone-600 text-center">Si viene a pagar algo (deuda, examen, matrícula, adelanto), toca el botón.</p>
+        <button type="button" class="btn btn-primary big-btn" @click="openOther()">Cobrar otra cosa</button>
+        <button type="button" class="btn btn-ghost text-lg self-start" @click="reset()">‹ Volver</button>
+      </div>
+    </template>
   </section>
 
   <!-- Error -->
@@ -242,7 +262,7 @@ function recepcion() {
     view: 'idle', clock: '', userName: '', isAdmin: false, demo: false,
     nfcSupported: NfcInput.webNfcSupported, nfcOn: false,
     methods: ['efectivo', 'ath_movil', 'tarjeta'],
-    session: null, st: null, photo: '', amount: '', payAll: false, ref: '', busy: false, notice: '',
+    session: null, st: null, photo: '', totals: { due_cents: 0, credit_cents: 0 }, classes: [], amount: '', payAll: false, ref: '', busy: false, notice: '',
     done: {}, countdown: 0, timer: null, errorMsg: '',
     q: '', results: [], classChoices: [], chosen: null,
     account: { due_cents: 0, credit_cents: 0, courses: [] },
@@ -329,7 +349,12 @@ function recepcion() {
         const d = await App.api('GET', `/api/students/${studentId}`);
         this.st = d.student;
         this.session = null;
+        this.photo = '';
+        this.totals = d.totals;
+        this.classes = d.enrollments.filter((e) => e.status === 'activo')
+          .map((e) => `${e.course_name} (${App.daysLabel(e.days)} ${App.fmtTime(e.start_time)})`);
         this.view = 'noclass';
+        if (d.student.has_photo) App.api('GET', `/api/students/${studentId}/photo`).then((p) => { if (this.st?.id === studentId) this.photo = p.photo; }).catch(() => {});
         this.autoReturn(30);
       } catch (e) { this.fail(e.message); }
     },
